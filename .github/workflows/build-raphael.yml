@@ -29,6 +29,10 @@ on:
         description: "是否同时刷 dtbo（默认 false，避免覆盖 ROM 覆盖层）"
         type: boolean
         default: false
+      debug_ramoops:
+        description: "调试用：DTB 内注入 ramoops 保留内存，卡米后可从 pstore 取日志（默认 false）"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -149,6 +153,7 @@ jobs:
           DTBO="$PWD/kernel/out/arch/arm64/boot/dtbo.img" \
           DTB_MODE="${{ inputs.dtb_mode }}" \
           FLASH_DTBO="${{ inputs.flash_dtbo }}" \
+          DEBUG_RAMOOPS="${{ inputs.debug_ramoops }}" \
           TAG="$(date +%Y%m%d-%H%M)-${{ inputs.slim_level }}" \
           bash scripts/pack.sh
 

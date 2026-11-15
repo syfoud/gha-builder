@@ -87,6 +87,7 @@ No official (legacy) KernelSU directory exists in that tree (`drivers/staging/ke
 | `slim_level` | `safe` | `none`: no trimming. `safe`: disable `MODULES`, `DEBUG_FS`, `FTRACE`, `SQUASHFS`, `MHI_BUS`, `PCI`, `LZO`. `plus`: additionally disable `MMC`, `ANDROID_LOW_MEMORY_KILLER`, `UCLAMP_TASK`, `CORESIGHT`. |
 | `dtb_mode` | `dtb_2005` | `dtb_2005`: append `dtb/2005-dtb.bin` after `Image.gz` (preserves the reference EAS/thermal/frequency/UFS tuning). `tree_dtb`: use the device tree produced by the source tree. |
 | `flash_dtbo` | `false` | When `true`, the tree-built `dtbo.img` is included and `flash_dtbo` is inserted after `flash_boot`. Disabled by default to avoid replacing ROM-specific overlays. |
+| `debug_ramoops` | `false` | Debug aid: appends `dtb/2005-dtb-ramoops.bin` instead of `dtb/2005-dtb.bin`. The variant adds a `ramoops` reserved-memory node (0xa1600000, 8 MiB, copied from the reference 4.14.357 device tree) so that a failed boot leaves a retrievable console log in `pstore`. |
 
 ---
 
@@ -163,6 +164,7 @@ ak3/                                  AnyKernel3 template (Magisk patching remov
   META-INF/…                          recovery entry files
 config/                               kernel configuration fragments
 dtb/2005-dtb.bin                      reference device tree (447,435 bytes)
+dtb/2005-dtb-ramoops.bin              same tree + ramoops node (debug builds, 447,732 bytes)
 scripts/pack.sh                       packaging: Image + DTB → Image.gz-dtb → ZIP
 scripts/selftest.sh                   local validation of packaging and cleanup logic
 ```
@@ -236,7 +238,50 @@ With `dtb_mode=dtb_2005` the reference device tree is appended verbatim, preserv
 
 ---
 
-## 12. Third-party components
+## 12. Diagnosing a boot hang
+
+A flash that leaves the device at the OEM boot logo ("stuck at Mi") can originate from several layers. Classify the symptom first, then collect evidence.
+
+### 12.1 Stage classification
+
+| Symptom | Layer | Typical cause |
+|---|---|---|
+| Logo appears, then immediate reboot / black screen, no USB reaction | Kernel decompression or early init | kernel image/DTB incompatible, truncated image, wrong payload layout |
+| Stuck at logo, device enumerated by `fastboot` but not `adb`, no kernel log | Early kernel init before console | DTB/SoC variant mismatch, memory reservation conflict |
+| Boot proceeds, hangs at second stage or at boot animation | Userspace | missing vendor modules, manager/module conflict, SELinux policy |
+
+### 12.2 Evidence collection
+
+| Source | Availability | Command |
+|---|---|---|
+| `pstore` / `ramoops` console log | only if the booted DTB declares a `ramoops` reservation; build with `debug_ramoops=true` | `ls -l /sys/fs/pstore/` then `cat /sys/fs/pstore/console-ramoops*` |
+| `/proc/last_kmsg` | not present in these kernels | — |
+| Recovery `dmesg` | reflects the **recovery** kernel, not the flashed one | do not use for attribution |
+| UART / `earlycon` | requires a modified boot cmdline | out of scope for this installer |
+| Empty `fastboot boot` test | isolates image content from partition writes | `fastboot boot <boot image>` |
+
+### 12.3 Known risk factors for this pipeline
+
+| Risk | Detail | Mitigation |
+|---|---|---|
+| **SoC variant mismatch** | `dtb/2005-dtb.bin` contains a single FDT with `qcom,msm-id = <339 0x20000>` (SM8150 v2). The reference ROM boot image carries four variants (SM8150 v1/v2, SM8150P v1/v2). On an SM8150P device (`msm-id 361`) or a v1 part there is no matching entry. | check `cat /sys/devices/soc0/machine`; use `dtb_mode=tree_dtb` (the source tree's DTBs cover 339 and 361) |
+| No `ramoops` in the reference DTB | the reference DTBs declare no `ramoops` reservation, so no post-mortem log is written | build with `debug_ramoops=true` |
+| `MODULES=n` (slim levels) | Android 13-era ROMs may ship loadable modules under `/vendor/lib/modules` or a `vendor_dlkm` partition; a monolithic kernel cannot load them | inspect `ls /vendor/lib/modules`; if non-empty use `slim_level=none` |
+| KernelSU integration mismatch | `ksu_commit` pinned to a tag incompatible with the tree | leave `ksu_commit` empty (tree version) when bisecting |
+| Image write / AVB | repacked image rejected or wrong partition written | verify `fastboot boot` and the flash target; the installer writes `boot` only |
+
+### 12.4 Bisection matrix
+
+| Attempt | `dtb_mode` | `slim_level` | Purpose |
+|---|---|---|---|
+| 1 | `tree_dtb` | `none` | most conservative: tree-matched DTB, no configuration trimming |
+| 2 | `dtb_2005` | `none` | isolates the reference tuning from configuration trimming |
+| 3 | `tree_dtb` | `safe` | isolates trimming from the DTB |
+| 4 | default | default | full "2005-like" configuration |
+
+Change one dimension per attempt; a booting build narrows the cause to the dimension that changed.
+
+## 13. Third-party components
 
 | Component | Purpose | Upstream |
 |---|---|---|

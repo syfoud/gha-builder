@@ -21,6 +21,12 @@ gzip_if_needed() {
   esac
 }
 
+# 调试变体：DTB 里带 ramoops（卡米后可抓 pstore 日志）
+if [ "${DEBUG_RAMOOPS:-false}" = "true" ]; then
+  DTB_2005="$ROOT/dtb/2005-dtb-ramoops.bin"
+  echo "使用带 ramoops 的 2005 DTB: $DTB_2005"
+fi
+
 case "$MODE" in
   tree_dtb)
     if [ -n "${KERNEL_GZDTB:-}" ] && [ -f "${KERNEL_GZDTB}" ]; then

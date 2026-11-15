@@ -1,127 +1,249 @@
-# raphael 内核构建器：2005 瘦身 + KernelSU-Next（开源重编）
+# Raphael Kernel Builder — Linux 4.14 with KernelSU-Next
 
-用**开源源码**编出真正的「4.14 + KernelSU-Next（+SUSFS）+ 2005 瘦身/调参」内核，产出**可直接卡刷的 AnyKernel3 zip**。
-不在本机编译，全部在 GitHub Actions 里完成。
+A reproducible GitHub Actions pipeline that compiles a Xiaomi SM8150 (`raphael` / `raphaels` / `raphaelin`) Linux 4.14 kernel from open-source sources and packages it into a flashable **AnyKernel3** ZIP.
 
-## 为什么能成
+The default configuration targets a *lean* kernel that mirrors the tuning and trimming choices found in the popular "2005"-style raphael kernels, while integrating a current-generation **KernelSU-Next** root solution (and **SUSFS**, when the source tree provides it).
 
-默认源码 `SOVIET-ANDROID/kernel_xiaomi_raphael$16.0-SUSFS`（已核实）：
-- `Makefile` = **4.14.357**（与 6.1 内核同上游版本）
-- `drivers/kernelsu/` = **KernelSU-Next**（`Kconfig: config KSU default y`，无 KPROBES 时自动 `KSU_MANUAL_HOOK default y`）
-- `fs/susfs.c` = **SUSFS 内置**
-- `arch/arm64/configs/raphael_defconfig`，`CONFIG_WIREGUARD/CONFIG_NTFS_FS/CONFIG_EROFS_FS` 本来就有
-- 无任何官方旧 KernelSU 目录：`drivers/staging/kernelsu`、`KernelSU/kernel`、`drivers/KernelSU` 均**不存在**
+---
 
+## 1. What this repository produces
 
-## 与 2005 内核（Rikka V2 / 4.14.336）的差异 & 落实矩阵
+A single artifact per run:
 
-排除 Magisk 与 KSU 后，2005 与 SOVIET 树的差异分四类。`落实` 列说明 **本构建器出包后是否真的对齐**。
-
-### A. 上游版本（不可"落实"，属升级）
-| 项 | 2005 | SOVIET | 说明 |
-|---|---|---|---|
-| Linux 稳定版 | **4.14.336** | **4.14.357** | +21 个 stable 提交；构建器基于 357，不会回退 |
-
-### B. 编译期特性（2005 侧由二进制实测得出，SOVIET 侧读 defconfig 核实）
-
-| 配置项 | 2005（实测） | SOVIET raphael_defconfig | 是否落实 | 方式 |
-|---|---|---|---|---|
-| MODULES | **n**（无 vermagic/mod_unload 串） | 未提及 = 默认 **y** | ✅ 已补 `# CONFIG_MODULES is not set`（defconfig 里 0 个 `=m`，安全） | slim-safe/plus |
-| FTRACE | **n**（saved_cmdlines/# tracer/tracing_thresh 全 0） | 未提及 = 默认 **y** | ✅ safe 档关闭 | slim-safe/plus |
-| DEBUG_FS | **n**（debugfs_create_file/remove 全 0） | 未提及 = 默认 n（可能被 select） | ✅ 本来就一致；构建后打印确认 | — |
-| MMC / PCI / MHI / CORESIGHT / SQUASHFS / LZO / LMK | **n** | 均未提及 = 默认 n | ✅ 本来就一致 | — |
-| UCLAMP_TASK | **n**（uclamp 0 串） | **y** + `UCLAMP_TASK_GROUP=y` | ⚠ 仅 `plus` 档关闭；`safe` 档保留（uclamp 对调度有益，建议保留） | slim-plus |
-| WIREGUARD / NTFS_FS / EROFS_FS / EXFAT_FS / FQ_CODEL / ZRAM / SELINUX | **y** | **y** | ✅ 本来就一致 | — |
-| TCP_CONG_BBR | **y** | 未提及 = 默认 **n** | ✅ 新增 `config/features-2005.config` | features-2005 |
-| TCP_CONG_WESTWOOD | **y** | `# ... is not set` | ✅ 同上 | features-2005 |
-| KALLSYMS | 未知（二进制无法判定） | **明确 n** | ➖ 默认不动；需要时合并 `config/extra-kallsyms.config` | 可选 |
-| IKCONFIG | **n** | **y**（有 `/proc/config.gz`） | ➖ 保留差异（便于刷后核对，无性能影响） | — |
-| KPROBES | ？ | 默认 n → `KSU_MANUAL_HOOK` 自动 y | ➖ 不动（改它会破坏 KSU 集成方式） | — |
-
-### C. 设备树 / 调参（builder 默认 100% 落实）
-
-启用 `dtb_mode=dtb_2005` 时，构建器把 **2005 原版 DTB 原样追加**到 `Image.gz` 后 —— 不是"近似"，是同一份数据：
-
-- EAS `capacity-dmips-mhz` 488/1024、8 个 CPU 的 `freq-energy-model`
-- `energy-costs/core-cost0/1/2 busy-cost-data` 2005 重算表
-- `cpucc qcom,cpufreq-table-0/4/7`
-- UFS `pm-qos-cpu-group-latency-us` 100µs ×8 组、glink/cdsp `qos-latency-us` 67
-- GPU `opp-690000000`、`rpmh-regulator-ldoa13` 2704000µV、jtagmm disabled、CoreSight 节点删除
-- `/chosen/bootargs` 全套 flags
-
-选 `dtb_mode=tree_dtb` 则用 SOVIET 树自己编出的 dtb（取值由树决定，不含 2005 调参）。
-
-### D. 无法落实的部分（诚实边界）
-
-1. **作者私有代码改动**（Rikka 在 sched/thermal/驱动层的私有 patch）：二进制里无法逐条还原，构建器不会假装有；
-2. **2005 的 boot 头 cmdline**（`console=… / buildvariant=userdebug` 等）：刷机包只换内核区，cmdline 保留你 ROM 原样 —— 这是正确行为，不是缺失；
-3. **代码生成级差异**：2005 用 clang 18.1.0rc + LLD，SOVIET CI 用 r547379 → 功能等价、但非字节等价。
-
-### E. 如何验证"是否落实"
-
-1. CI 出包会打印 **《2005 对齐状态》** 表（实际 `out/.config` 每项 y/n）+ `BBR ✔ / westwood ✔ / MODULES=n ✔` 三条提示；
-2. 刷机后 `zcat /proc/config.gz | grep …` 可直接核对（SOVIET 开了 IKCONFIG）；
-3. 内核串对比：`strings Image | grep -cE 'sdhci|mmc_blk' # 期望 1 以内`、`grep -c 'tcp_bbr' # 期望 >0`。
-
-## 用法
-
-1. 把本目录推到自己的 GitHub 仓库（任意私有/公开库）：
-   ```bash
-   git init && git add -A && git commit -m "builder"
-   git remote add origin git@github.com:<你的>/raphael-kernel-builder.git
-   git push -u origin main
-   ```
-2. Actions → **Build raphael kernel (2005-slim + KernelSU-Next)** → Run workflow
-3. 参数：
-   | 输入 | 默认 | 说明 |
-   |---|---|---|
-   | `kernel_repo` / `kernel_branch` | SOVIET / `16.0-SUSFS` | 也可换成 LineageOS/crDroid 的 `android_kernel_xiaomi_sm8150`（但那两棵没集成 KSU） |
-   | `ksu_commit` | 空 | 填 tag/commit 会把树内 KernelSU-Next 更新到该版本（`drivers/kernelsu/setup.sh`） |
-   | `slim_level` | `safe` | `none` / `safe`（裁 MODULES、DEBUG_FS、FTRACE、SQUASHFS、MHI、PCI、LZO）/ `plus`（再裁 MMC、LMK、uclamp、CoreSight，风险自负） |
-   | `dtb_mode` | `dtb_2005` | `dtb_2005`=用 2005 设备树（保住 EAS 488/1024、能量表、频表、UFS/glink QoS）；`tree_dtb`=用树自己的 |
-   | `flash_dtbo` | false | true 时才额外刷树编出的 dtbo |
-4. 产物：Actions run 里的 artifact `raphael-ksunext-anykernel3` → 里面就是一个 **卡刷 zip**。
-
-## 出包前自动校验（不通过直接失败，不会给你坏包）
-
-判定依据修正过（第一次运行就栽在这里）：**Image 是 strip 的、且该树 `CONFIG_KALLSYMS=n`，函数名/符号名不会出现在二进制里**，所以：
-
-- ❌ 不能用 `ksu_handle_*` / `hook_manager` 做判据（实测 6.1 与 2005 内核里都是 0 次）；
-- ❌ `save_allow_list write version failed` 新版 KSU 也有（实测 6.1=1、2005=1），不能当"旧版残留"判据；
-
-现在的校验：
-
-| 检查 | 判据 |
-|---|---|
-| KSU 已开启 | `CONFIG_KSU=y` 必须在 `out/.config` |
-| 是**新版** KSU | Image 里必须出现 `su_compat` / `kernel_umount` / `mnt_ns magic`（旧官方 v0.8 线没有这三个） |
-| 钩子方式 | 打印 `CONFIG_KSU_MANUAL_HOOK=y`（该树无 KPROBES，只能 manual hook） |
-| SUSFS | 打印 `CONFIG_KSU_SUSFS*` 项数 |
-| 交叉验证 | 若 `out/vmlinux` 存在，统计其中 `ksu_*`/`kernelsu_*` 符号数 |
-
-## 刷入包做了什么（旧 KSU 用户态残留清理写进脚本了）
-
-- `anykernel.sh`：`do.ksucleanup=1`；`flash_boot` 成功后调用 `tools/ksucleanup.sh` 的 `ksu_cleanup_legacy`；
-- 清理内容（**备份后移动**，不是删除）：
-  - `/data/adb/ksu` → `/data/adb/ksu-legacy-backup-<时间戳>/ksu`（旧 allowlist、modules.img 等）
-  - `/data/adb/ksud` → 同备份目录（旧管理器推的二进制）
-  - 附带清理 `modules_update.img`、`ksud.old`、`ksu.old`
-- 不解包/删除 `/data/adb/modules`（模块数据保留）；
-- 管理器 app 不会被动（recovery 里不敢动 packages.xml），脚本会打印提示：
-  刷完请**卸载旧 KernelSU 管理器**，再装 **KernelSU-Next 管理器**；
-- 回滚：`mv /data/adb/ksu-legacy-backup-*/ksu /data/adb/ksu`（`ksud` 同理）；
-- 关闭清理：改 `anykernel.sh` 里 `do.ksucleanup=0`。
-
-## 本地自测（不需要编译，验证打包链路）
-
-```bash
-KERNEL_IMG=/path/to/Image DTB_MODE=dtb_2005 TAG=test bash scripts/pack.sh
-# 或整体验证（会检查 zip 内容、anykernel.sh、清理函数）
-bash scripts/selftest.sh
+```
+raphael-2005slim-ksunext-<timestamp>-<slim_level>.zip
 ```
 
-## 已知边界
+This ZIP is an AnyKernel3 installer that:
 
-- 这是**开源树重编**，不是 Rikka/MIUICX 的私有源码：6.1 的私有补丁（hwui 注入内核侧、dtbo 定制等）无法复现；
-- `dtb_2005` 模式把 2005 DTB 追加在 `Image.gz` 后；若某外设异常，改 `tree_dtb` 再编一次对比即可；
-- 树内 KernelSU-Next 版本较旧时，用 `ksu_commit` 输入更新到指定版本；管理器请用 **KernelSU-Next 管理器**（官方 KSU 管理器不认）。
+* replaces only the kernel region of the `boot` partition;
+* leaves the ramdisk, header cmdline and vbmeta/AVB state untouched;
+* contains **no Magisk boot-patching logic** (no `skip_initramfs` hex patch, no DTB verity/AVB removal, no vbmeta flag modification);
+* performs a supervised cleanup of legacy KernelSU user-space data (see §7).
+
+---
+
+## 2. Pipeline overview
+
+```
+workflow_dispatch
+        │
+        ├─ install build dependencies (bc/bison/flex/libssl/libelf/ccache/…)
+        ├─ fetch AOSP clang r547379 (crDroid prebuilt, cached)
+        ├─ clone the kernel source tree (default: SOVIET-ANDROID/kernel_xiaomi_raphael@16.0-SUSFS, Linux 4.14.357)
+        ├─ optional: update the in-tree KernelSU-Next to a pinned tag/commit
+        ├─ configure: raphael_defconfig + features fragment + optional slim fragment
+        ├─ build: make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" -j
+        ├─ verify KernelSU integration (hard gate)
+        ├─ report post-build configuration status
+        ├─ package: Image + 2005 device tree → Image.gz-dtb → AnyKernel3 ZIP
+        └─ upload artifact
+```
+
+The default source tree already contains:
+
+* `drivers/kernelsu/` — KernelSU-Next (`config KSU`, `default y`);
+* `fs/susfs.c` — SUSFS;
+* `arch/arm64/configs/raphael_defconfig` — buildable raphael configuration.
+
+No official (legacy) KernelSU directory exists in that tree (`drivers/staging/kernelsu`, `KernelSU/kernel`, `drivers/KernelSU` are absent).
+
+---
+
+## 3. Requirements
+
+* A GitHub account with Actions enabled (public repositories include free runners).
+* No local toolchain is required.
+* Expected runtime: 40–80 minutes for a cold build; substantially faster once the clang and source caches are warm.
+
+---
+
+## 4. Usage
+
+1. Push this repository to GitHub (fork or create a new repository and push these files):
+
+   ```bash
+   git remote add origin git@github.com:<account>/gha-builder.git
+   git push -u origin main
+   ```
+
+2. Open **Actions → Build raphael kernel (2005-slim + KernelSU-Next) → Run workflow**.
+
+3. Keep the defaults for a "2005-like" kernel, or adjust the inputs (see §5).
+
+4. When the run completes, download the artifact **`raphael-ksunext-anykernel3`** and flash the contained ZIP from a custom recovery.
+
+> Note: *Re-run jobs* replays the workflow file at the commit that originally triggered the run. To pick up changes to the workflow, start a **new** run via *Run workflow*.
+
+---
+
+## 5. Workflow inputs
+
+| Input | Default | Description |
+|---|---|---|
+| `kernel_repo` | `https://github.com/SOVIET-ANDROID/kernel_xiaomi_raphael` | Kernel source repository. LineageOS/crDroid `android_kernel_xiaomi_sm8150` trees also build, but do not ship KernelSU integration. |
+| `kernel_branch` | `16.0-SUSFS` | Source branch (4.14.357). Alternatives: `15-susfs` (4.14.353), `16.0` / `15.0` (no root integration). |
+| `ksu_commit` | *(empty)* | Optional KernelSU-Next tag or commit. When set, `drivers/kernelsu/setup.sh` updates the in-tree integration before building. |
+| `slim_level` | `safe` | `none`: no trimming. `safe`: disable `MODULES`, `DEBUG_FS`, `FTRACE`, `SQUASHFS`, `MHI_BUS`, `PCI`, `LZO`. `plus`: additionally disable `MMC`, `ANDROID_LOW_MEMORY_KILLER`, `UCLAMP_TASK`, `CORESIGHT`. |
+| `dtb_mode` | `dtb_2005` | `dtb_2005`: append `dtb/2005-dtb.bin` after `Image.gz` (preserves the reference EAS/thermal/frequency/UFS tuning). `tree_dtb`: use the device tree produced by the source tree. |
+| `flash_dtbo` | `false` | When `true`, the tree-built `dtbo.img` is included and `flash_dtbo` is inserted after `flash_boot`. Disabled by default to avoid replacing ROM-specific overlays. |
+
+---
+
+## 6. Configuration fragments
+
+| File | Applied by default | Purpose |
+|---|---|---|
+| `config/features-2005.config` | yes | Enables `TCP_CONG_BBR` and `TCP_CONG_WESTWOOD` (present in the reference kernel, disabled in the upstream defconfig). |
+| `config/slim-safe.config` | yes when `slim_level=safe` | Disables `MODULES`, `DEBUG_FS`, `FTRACE`, `SQUASHFS`, `MHI_BUS`, `PCI`, `LZO`. |
+| `config/slim-plus.config` | only when `slim_level=plus` | Additionally disables `MMC`, `ANDROID_LOW_MEMORY_KILLER`, `UCLAMP_TASK`, `CORESIGHT`. |
+| `config/extra-kallsyms.config` | no (opt-in) | Enables `KALLSYMS` (the upstream defconfig disables it). Add it to `FRAGS` in the workflow if symbol resolution is required. |
+
+Fragments are merged with `scripts/kconfig/merge_config.sh -m -O out out/.config <fragments>` followed by `olddefconfig`.
+
+---
+
+## 7. KernelSU verification (CI hard gate)
+
+The Image produced by this tree is stripped and `CONFIG_KALLSYMS=n`, therefore **function and symbol names are not present in the binary**. Verification therefore uses configuration and behavioural markers:
+
+| Check | Criterion |
+|---|---|
+| Integration enabled | `CONFIG_KSU=y` present in `out/.config` |
+| Current-generation KernelSU | Image contains the `su_compat`, `kernel_umount` and `mnt_ns magic` markers (legacy v0.8-era integrations do not) |
+| Hook mode | `CONFIG_KSU_MANUAL_HOOK=y` is reported (the tree has no `CONFIG_KPROBES`, so KernelSU-Next is integrated through manual hooks) |
+| SUSFS | Number of `CONFIG_KSU_SUSFS*` entries is reported |
+| Cross-check | When `out/vmlinux` exists, the count of `ksu_*` / `kernelsu_*` symbols is reported |
+
+A failed gate aborts the run before packaging, so an improperly integrated kernel is never published as an artifact.
+
+---
+
+## 8. Flashing and user-space cleanup
+
+The installer replaces the kernel region only. After a successful `flash_boot`, `anykernel.sh` invokes `tools/ksucleanup.sh`.
+
+| Target | Action |
+|---|---|
+| `/data/adb/ksu` | moved to `/data/adb/ksu-legacy-backup-<timestamp>/ksu` (legacy allowlist, image files, etc.) |
+| `/data/adb/ksud` | moved to the same backup directory |
+| `modules_update.img`, `ksud.old`, `ksu.old` | moved to the same backup directory when present |
+| `/data/adb/modules` | **untouched** |
+
+Legacy and current KernelSU releases share the `/data/adb/ksu` path but use incompatible on-disk formats; without this cleanup a freshly installed KernelSU-Next manager can appear installed yet be unable to grant root.
+
+Behaviour notes:
+
+* The cleanup **moves** data rather than deleting it, so it is reversible:
+  ```bash
+  mv /data/adb/ksu-legacy-backup-*/ksu  /data/adb/ksu
+  mv /data/adb/ksu-legacy-backup-*/ksud /data/adb/ksud
+  ```
+* It can be disabled by setting `do.ksucleanup=0` in `ak3/anykernel.sh`.
+* The manager application itself is not modified by the installer. After flashing, uninstall the legacy KernelSU manager and install the **KernelSU-Next** manager (the kernel verifies the manager APK signature, so managers from other projects are not recognised).
+
+Recommended procedure:
+
+1. Back up the current boot partition (`dd if=/dev/block/bootdevice/by-name/boot of=/sdcard/boot_backup.img` or a TWRP boot backup).
+2. Flash the artifact ZIP in a custom recovery.
+3. Verify with `uname -r` (expect a `4.14.357-…` kernel; the default tree uses `EXTRAVERSION = -openela`, so the string is typically `4.14.357-openela…`, with the exact suffix determined by `setlocalversion`) and install the matching manager.
+4. To roll back, flash the previous kernel ZIP, or `fastboot flash boot <backup image>`.
+
+---
+
+## 9. Repository layout
+
+```
+.github/workflows/build-raphael.yml   CI pipeline
+ak3/                                  AnyKernel3 template (Magisk patching removed)
+  anykernel.sh                        installer entry point (device checks, cleanup hook)
+  tools/ak3-core.sh                   AnyKernel3 core (modified)
+  tools/ksucleanup.sh                 legacy KernelSU user-space cleanup
+  tools/*                             busybox / magiskboot / fec / …  (AnyKernel3 toolset)
+  META-INF/…                          recovery entry files
+config/                               kernel configuration fragments
+dtb/2005-dtb.bin                      reference device tree (447,435 bytes)
+scripts/pack.sh                       packaging: Image + DTB → Image.gz-dtb → ZIP
+scripts/selftest.sh                   local validation of packaging and cleanup logic
+```
+
+---
+
+## 10. Local validation (no compilation required)
+
+```bash
+bash scripts/selftest.sh [/path/to/Image]
+```
+
+The self-test covers four areas:
+
+1. shell syntax of `anykernel.sh`, `ksucleanup.sh` and `pack.sh`;
+2. cleanup logic against a simulated `/data/adb` (backup creation, removal from the original location, `/data/adb/modules` preserved, `do.ksucleanup=0` and `=1` both honoured);
+3. packaging in `dtb_2005` mode (ZIP integrity, gzip stream, appended DTB, absence of Magisk patch code, presence of the cleanup call);
+4. `flash_dtbo` insertion (dtbo packaged and `flash_dtbo;` inserted exactly once).
+
+Packaging can also be exercised directly:
+
+```bash
+KERNEL_IMG=/path/to/Image DTB_MODE=dtb_2005 TAG=local bash scripts/pack.sh
+```
+
+---
+
+## 11. Relationship to the reference "2005" kernel
+
+The reference kernel in this project is `4.14.336-Rikka-V2-2005-remake`. Excluding rooting and boot-patching topics, differences fall into four categories:
+
+### 11.1 Upstream version
+
+| | Reference | Default source tree |
+|---|---|---|
+| Linux stable | 4.14.336 | 4.14.357 (+21 stable releases) |
+
+### 11.2 Compile-time features
+
+The reference values were measured from the shipped Image; the source-tree values were read from `raphael_defconfig`.
+
+| Option | Reference | Source tree | Alignment |
+|---|---|---|---|
+| `MODULES` | n | default y | targeted by `slim-safe`/plus |
+| `FTRACE` | n | default y | targeted by `slim-safe`/plus |
+| `DEBUG_FS`, `MMC`, `PCI`, `MHI_BUS`, `CORESIGHT`, `SQUASHFS`, `LZO`, LMK | n | default n | already identical |
+| `UCLAMP_TASK` | n | y | `plus` only (retained in `safe` deliberately) |
+| `WIREGUARD`, `NTFS_FS`, `EROFS_FS`, `EXFAT_FS`, `NET_SCH_FQ_CODEL`, `ZRAM`, SELinux | y | y | already identical |
+| `TCP_CONG_BBR`, `TCP_CONG_WESTWOOD` | y | n | enabled by `features-2005` |
+| `KALLSYMS` | indeterminate from binary | n | opt-in via `extra-kallsyms` |
+| `IKCONFIG` | n | y | retained (useful for post-flash inspection) |
+
+The CI run prints the **actual** post-build values of these options, so alignment is verifiable per build rather than assumed.
+
+### 11.3 Device tree and runtime tuning
+
+With `dtb_mode=dtb_2005` the reference device tree is appended verbatim, preserving:
+
+* EAS `capacity-dmips-mhz` (488 / 1024) and per-CPU `freq-energy-model`;
+* recalculated `energy-costs` `busy-cost-data` tables;
+* `qcom,cpufreq-table-0/4/7`;
+* UFS `pm-qos-cpu-group-latency-us` (100 µs × 8 groups) and glink/cdsp `qos-latency-us` (67);
+* GPU `opp-690000000`, `rpmh-regulator-ldoa13` (2,704,000 µV), disabled `jtagmm` nodes, removed CoreSight nodes;
+* the reference `/chosen/bootargs`.
+
+### 11.4 Not reproducible
+
+* Private source-level changes made by the reference authors. The shipped images are stripped, have no symbol table (`CONFIG_KALLSYMS=n`), and no matching configuration is available, so a function-level reconstruction is not possible from the binaries alone.
+* The reference boot header command line (`console=… buildvariant=userdebug`). The installer deliberately preserves the command line of the target ROM.
+* Code-generation differences caused by different compiler builds (reference: clang 18.1.0rc + LLD; pipeline: r547379).
+
+---
+
+## 12. Third-party components
+
+| Component | Purpose | Upstream |
+|---|---|---|
+| SOVIET-ANDROID `kernel_xiaomi_raphael` | default kernel source (4.14.357) | GitHub |
+| KernelSU-Next | kernel-side root integration | GitHub |
+| SUSFS | syscall/path hiding additions | GitLab (simonpunk) |
+| AnyKernel3 (osm0sis) and toolset | installer framework, `magiskboot`, `busybox` | XDA / GitHub |
+| AOSP clang r547379 (crDroid prebuilt) | build toolchain | GitLab |
+
+Third-party binaries bundled under `ak3/tools/` retain their original licenses. The scripts and workflow in this repository are provided as-is, without warranty; flashing modified boot images can render a device unbootable, so keep a boot backup.

@@ -1,0 +1,98 @@
+name: Rikka 2005 base with KernelSU Next legacy
+on:
+  push:
+    branches: [rikka-2005-ksunext]
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [next, control]
+    env:
+      VARIANT: ${{ matrix.variant }}
+      KERNEL_SHA: 222b8d42dde3f13973357cae50359fa2aca8239d
+      KSU_SHA: e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a
+      CLANG_SHA: 384088e3bbf8cae957785c17ada7e87932cf62f2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential flex libelf-dev libssl-dev \
+            libncurses-dev python3 zip device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+      - uses: actions/cache@v4
+        id: clang
+        with:
+          path: ~/clang-r510928
+          key: rikka-clang-384088e3-v1
+      - name: Fetch pinned compiler
+        run: |
+          if [ ! -d "$HOME/clang-r510928/.git" ]; then
+            git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r510928.git "$HOME/clang-r510928"
+          fi
+          test "$(git -C "$HOME/clang-r510928" rev-parse HEAD)" = "$CLANG_SHA"
+          "$HOME/clang-r510928/bin/clang" --version
+      - name: Fetch pinned sources
+        run: |
+          mkdir -p evidence dist
+          git init kernel
+          git -C kernel remote add origin https://github.com/jianyi520/kernel_xiaomi_raphael-rikka.git
+          git -C kernel fetch --depth=1 origin "$KERNEL_SHA"
+          git -C kernel checkout --detach FETCH_HEAD
+          git clone --branch legacy https://github.com/KernelSU-Next/KernelSU-Next.git kernel/drivers/staging/kernelsu
+          git -C kernel/drivers/staging/kernelsu checkout --detach "$KSU_SHA"
+          python3 scripts/prepare-rikka.py kernel
+      - name: Configure and build
+        run: |
+          set -o pipefail
+          bash scripts/build-rikka.sh 2>&1 | tee evidence/build.log
+      - name: Verify and package
+        run: python3 scripts/pack-rikka.py kernel "$VARIANT"
+      - name: Save failure and success evidence
+        if: always()
+        run: |
+          mkdir -p evidence
+          if [ -d kernel/.git ]; then
+            git -C kernel diff --binary > evidence/kernel-final.patch
+            git -C kernel status --short > evidence/kernel-status.txt
+            git -C kernel rev-parse HEAD > evidence/kernel-commit.txt
+            git -C kernel/drivers/staging/kernelsu diff --binary > evidence/ksu-final.patch || true
+            git -C kernel/drivers/staging/kernelsu rev-parse HEAD > evidence/ksu-commit.txt || true
+            for f in .config .config.old System.map vmlinux include/generated/compile.h include/generated/utsrelease.h; do
+              if [ -f "kernel/out/$f" ]; then
+                mkdir -p "evidence/$(dirname "$f")"
+                cp "kernel/out/$f" "evidence/$f"
+              fi
+            done
+            for f in Image Image.gz-dtb dtbo.img dts/qcom/sm8150-v2.dtb; do
+              if [ -f "kernel/out/arch/arm64/boot/$f" ]; then
+                mkdir -p "evidence/boot/$(dirname "$f")"
+                cp "kernel/out/arch/arm64/boot/$f" "evidence/boot/$f"
+              fi
+            done
+          fi
+          env | grep -E '^(KERNEL_SHA|KSU_SHA|CLANG_SHA|VARIANT|GITHUB_SHA|GITHUB_RUN_ID|GITHUB_RUN_ATTEMPT)=' > evidence/build-identity.txt
+          git rev-parse HEAD > evidence/builder-commit.txt
+          cp .github/workflows/build-rikka.yml evidence/
+          cp scripts/*rikka* evidence/
+          find evidence -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rikka-2005-${{ matrix.variant }}-evidence
+          path: evidence/
+          include-hidden-files: true
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: rikka-2005-${{ matrix.variant }}-flashable
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

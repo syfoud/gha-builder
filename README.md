@@ -1,5 +1,7 @@
 # Raphael Kernel Builder — Linux 4.14 with KernelSU-Next
 
+> **2026-11-16 修复分支说明：** `rikka-2005-ksunext` 分支新增 `build-rikka.yml`，使用固定的 Rikka 4.14.336 源码和 KernelSU Next legacy 提交，产出 `next` 与关闭 KSU 的 `control` 两个包。下面旧的 SOVIET + 2005-slim 工作流保留作历史记录；本次交付以新工作流为准。验收、boot 备份和失败取证步骤见 [失败复盘与验收](docs/失败复盘与验收.md)。源码基底：[Rikka 固定提交](https://github.com/jianyi520/kernel_xiaomi_raphael-rikka/commit/222b8d42dde3f13973357cae50359fa2aca8239d)；root：[Next legacy 固定提交](https://github.com/KernelSU-Next/KernelSU-Next/commit/e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a)。
+
 A reproducible GitHub Actions pipeline that compiles a Xiaomi SM8150 (`raphael` / `raphaels` / `raphaelin`) Linux 4.14 kernel from open-source sources and packages it into a flashable **AnyKernel3** ZIP.
 
 The default configuration targets a *lean* kernel that mirrors the tuning and trimming choices found in the popular "2005"-style raphael kernels, while integrating a current-generation **KernelSU-Next** root solution (and **SUSFS**, when the source tree provides it).

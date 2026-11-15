@@ -1,0 +1,19 @@
+# 保证脚本在任意平台检出后仍是 LF（安卓 recovery 的 sh 不能吃 CRLF）
+* text=auto eol=lf
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+*.config text eol=lf
+update-binary text eol=lf
+updater-script text eol=lf
+# 二进制：禁止换行转换
+*.bin binary
+*.img binary
+*.zip binary
+ak3/tools/busybox binary
+ak3/tools/fec binary
+ak3/tools/httools_static binary
+ak3/tools/lptools_static binary
+ak3/tools/magiskboot binary
+ak3/tools/magiskpolicy binary
+ak3/tools/snapshotupdater_static binary

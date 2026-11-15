@@ -1,0 +1,124 @@
+name: Build raphael kernel (2005-slim + KernelSU-Next)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_repo:
+        description: "内核源码仓库（默认已内置 KernelSU-Next + SUSFS 的开源树）"
+        required: false
+        default: "https://github.com/SOVIET-ANDROID/kernel_xiaomi_raphael"
+      kernel_branch:
+        description: "源码分支"
+        required: false
+        default: "16.0-SUSFS"
+      ksu_commit:
+        description: "可选：把树内 KernelSU-Next 更新到指定 tag/commit（留空=用树内版本）"
+        required: false
+        default: ""
+      slim_level:
+        description: "2005 瘦身档位"
+        type: choice
+        options: [none, safe, plus]
+        default: safe
+      dtb_mode:
+        description: "设备树来源"
+        type: choice
+        options: [dtb_2005, tree_dtb]
+        default: dtb_2005
+      flash_dtbo:
+        description: "是否同时刷 dtbo（默认 false，避免覆盖 ROM 覆盖层）"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache curl flex git \
+            libelf-dev libncurses-dev libssl-dev unzip zip wget libarchive-tools python3
+
+      - name: Cache clang (crDroid r547379, 与 SOVIET 树一致)
+        id: clang
+        uses: actions/cache@v4
+        with:
+          path: ~/clang-r547379
+          key: clang-r547379-v1
+
+      - name: Fetch clang
+        if: steps.clang.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r547379.git \
+            "$HOME/clang-r547379"
+
+      - name: Clone kernel source
+        run: |
+          git clone --depth=1 -b "${{ inputs.kernel_branch }}" "${{ inputs.kernel_repo }}" kernel
+          cd kernel
+          git log --oneline -1
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL) =' Makefile
+
+      - name: Optionally update KernelSU-Next
+        if: inputs.ksu_commit != ''
+        working-directory: kernel
+        run: bash drivers/kernelsu/setup.sh "${{ inputs.ksu_commit }}"
+
+      - name: Configure (defconfig + 2005 slim fragment)
+        working-directory: kernel
+        run: |
+          export PATH="$HOME/clang-r547379/bin:$PATH"
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" raphael_defconfig
+          if [ "${{ inputs.slim_level }}" != "none" ]; then
+            chmod +x scripts/kconfig/merge_config.sh
+            ./scripts/kconfig/merge_config.sh -m -O out out/.config "../config/slim-${{ inputs.slim_level }}.config"
+            make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" olddefconfig
+          fi
+
+      - name: Build
+        working-directory: kernel
+        run: |
+          export PATH="$HOME/clang-r547379/bin:$PATH"
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" -j$(nproc)
+
+      - name: Verify KernelSU integration
+        working-directory: kernel
+        run: |
+          IMG=out/arch/arm64/boot/Image
+          ls -l "$IMG"
+          strings "$IMG" | grep -m1 'Linux version' || true
+          OLD=$(strings "$IMG" | grep -c 'save_allow_list write version failed' || true)
+          NEW=$(strings "$IMG" | grep -cE 'ksu_handle_sys_read|hook_manager' || true)
+          KSU=$(strings "$IMG" | grep -c 'KernelSU' || true)
+          echo "旧版(官方)KernelSU 痕迹: $OLD (必须为 0)"
+          echo "KernelSU-Next 钩子痕迹: $NEW (必须 >0)"
+          echo "KernelSU 字符串总数: $KSU"
+          [ "$OLD" -eq 0 ] || { echo "::error::检测到旧版 KernelSU 残留"; exit 1; }
+          [ "$NEW" -gt 0 ] || { echo "::error::未检测到 KernelSU-Next 集成"; exit 1; }
+          grep -q 'CONFIG_KSU=y' out/.config && echo "CONFIG_KSU=y ✔"
+          grep -q 'CONFIG_KSU_SUSFS' out/.config && echo "SUSFS 配置存在 ✔" || true
+
+      - name: Pack AnyKernel3 zip
+        run: |
+          KERNEL_IMG="$PWD/kernel/out/arch/arm64/boot/Image" \
+          KERNEL_GZDTB="$PWD/kernel/out/arch/arm64/boot/Image.gz-dtb" \
+          DTBO="$PWD/kernel/out/arch/arm64/boot/dtbo.img" \
+          DTB_MODE="${{ inputs.dtb_mode }}" \
+          FLASH_DTBO="${{ inputs.flash_dtbo }}" \
+          TAG="$(date +%Y%m%d-%H%M)-${{ inputs.slim_level }}" \
+          bash scripts/pack.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raphael-ksunext-anykernel3
+          path: dist/*.zip
+          if-no-files-found: error

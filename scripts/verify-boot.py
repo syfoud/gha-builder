@@ -18,7 +18,7 @@ root = Path(__file__).resolve().parent.parent
 payload = Path(sys.argv[1]).read_bytes()
 ev = Path(sys.argv[2]).resolve()
 image, dtb = split_kernel(payload)
-old_dtb = (root / 'dtb/2005-dtb.bin').read_bytes().replace(b'Qualcomm', b'OLDcomm', 1)
+old_dtb = (root / 'dtb/2005-dtb.bin').read_bytes().replace(b'Qualcomm', b'TESTcomm', 1)
 assert old_dtb != dtb
 parse_dtbs(old_dtb)
 old_payload = gzip.compress(image, mtime=0) + old_dtb
@@ -51,6 +51,7 @@ with tempfile.TemporaryDirectory() as tmp:
             r = subprocess.run(['qemu-arm', str(tool), *map(str, args)], cwd=work,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             logs.append(r.stdout)
+            (ev / 'boot-roundtrip.log').write_text('\n'.join(logs))
             assert r.returncode == 0, r.stdout
         run('unpack', original)
         extracted = sorted(p.name for p in work.iterdir())
@@ -74,6 +75,7 @@ with tempfile.TemporaryDirectory() as tmp:
             'boot_sha256': hashlib.sha256(boot).hexdigest(),
             'header_fields_preserved': True, 'image_preserved': True,
         }
+        (ev / 'boot-roundtrip.json').write_text(json.dumps(results, indent=2))
     assert results['clean']['native_dtb_preserved'], results
 (ev / 'boot-roundtrip.log').write_text('\n'.join(logs))
 (ev / 'boot-roundtrip.json').write_text(json.dumps(results, indent=2))

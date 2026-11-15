@@ -1,0 +1,72 @@
+name: Validate and package compiled Rikka kernels
+on:
+  push:
+    branches: [rikka-2005-package]
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [next, control]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install repack emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user python3
+      - name: Download immutable compilation evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: rikka-2005-${{ matrix.variant }}-evidence
+          path: evidence
+          run-id: 43775863832
+          github-token: ${{ github.token }}
+      - name: Verify parent evidence and reconstruct output layout
+        run: |
+          sha256sum -c evidence/SHA256SUMS > parent-hashes.log
+          grep -qx 'KERNEL_SHA=222b8d42dde3f13973357cae50359fa2aca8239d' evidence/build-identity.txt
+          grep -qx 'KSU_SHA=e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a' evidence/build-identity.txt
+          grep -qx 'CLANG_SHA=384088e3bbf8cae957785c17ada7e87932cf62f2' evidence/build-identity.txt
+          grep -qx 'GITHUB_SHA=ac53b3987f467a0b0227cb34ffbb4a86d45082c2' evidence/build-identity.txt
+          grep -qx 'VARIANT=${{ matrix.variant }}' evidence/build-identity.txt
+          cmp evidence/kernel-prebuild.patch evidence/kernel-postbuild.patch
+          mkdir -p kernel/out/arch/arm64/boot
+          cp -a evidence/boot/. kernel/out/arch/arm64/boot/
+          cp evidence/.config evidence/System.map kernel/out/
+          mv evidence/SHA256SUMS evidence/COMPILATION-SHA256SUMS
+          mv parent-hashes.log evidence/parent-hashes.log
+          cp evidence/builder-commit.txt evidence/compilation-builder-commit.txt
+          git rev-parse HEAD > evidence/packaging-builder-commit.txt
+          echo 43775863832 > evidence/compilation-run-id.txt
+      - name: Boot roundtrip, config, symbols, tuning and package verification
+        run: |
+          set -o pipefail
+          python3 scripts/pack-rikka.py kernel '${{ matrix.variant }}' 2>&1 | tee evidence/packaging.log
+      - name: Save packaging evidence
+        if: always()
+        run: |
+          mkdir -p evidence/packaging-scripts
+          cp scripts/pack-rikka.py scripts/verify-boot.py scripts/anykernel-rikka.sh scripts/fdt.py evidence/packaging-scripts/
+          cp .github/workflows/package-rikka.yml evidence/packaging-scripts/
+          find evidence -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validated-rikka-2005-${{ matrix.variant }}-evidence
+          path: evidence/
+          include-hidden-files: true
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: validated-rikka-2005-${{ matrix.variant }}-flashable
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

@@ -77,11 +77,14 @@ jobs:
         run: |
           export PATH="$HOME/clang-r547379/bin:$PATH"
           make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" raphael_defconfig
+          chmod +x scripts/kconfig/merge_config.sh
+          FRAGS="../config/features-2005.config"
           if [ "${{ inputs.slim_level }}" != "none" ]; then
-            chmod +x scripts/kconfig/merge_config.sh
-            ./scripts/kconfig/merge_config.sh -m -O out out/.config "../config/slim-${{ inputs.slim_level }}.config"
-            make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" olddefconfig
+            FRAGS="$FRAGS ../config/slim-${{ inputs.slim_level }}.config"
           fi
+          ./scripts/kconfig/merge_config.sh -m -O out out/.config $FRAGS
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" olddefconfig
+          echo "--- 合并的片段 ---"; echo $FRAGS
 
       - name: Build
         working-directory: kernel
@@ -105,6 +108,21 @@ jobs:
           [ "$NEW" -gt 0 ] || { echo "::error::未检测到 KernelSU-Next 集成"; exit 1; }
           grep -q 'CONFIG_KSU=y' out/.config && echo "CONFIG_KSU=y ✔"
           grep -q 'CONFIG_KSU_SUSFS' out/.config && echo "SUSFS 配置存在 ✔" || true
+
+      - name: 2005 对齐状态（编译后实际 config）
+        working-directory: kernel
+        run: |
+          C=out/.config
+          st() { if grep -qx "CONFIG_$1=y" "$C"; then echo y; elif grep -qx "# CONFIG_$1 is not set" "$C" || ! grep -q "CONFIG_$1=" "$C"; then echo n; else echo m; fi; }
+          printf "%-28s %-6s %-8s\n" "配置项" "2005" "本次构建"
+          for k in MODULES DEBUG_FS FTRACE SQUASHFS MMC PCI MHI_BUS CORESIGHT LZO_COMPRESS \
+                   ANDROID_LOW_MEMORY_KILLER UCLAMP_TASK KPROBES KALLSYMS IKCONFIG \
+                   WIREGUARD NTFS_FS EROFS_FS EXFAT_FS TCP_CONG_BBR TCP_CONG_WESTWOOD NET_SCH_FQ_CODEL ZRAM; do
+            printf "%-28s %-6s %-8s\n" "$k" "-" "$(st $k)"
+          done
+          grep -q 'CONFIG_TCP_CONG_BBR=y' "$C" && echo "BBR ✔" || echo "::warning::BBR 未开启"
+          grep -q 'CONFIG_TCP_CONG_WESTWOOD=y' "$C" && echo "westwood ✔" || echo "::warning::westwood 未开启"
+          grep -qx '# CONFIG_MODULES is not set' "$C" && echo "MODULES=n ✔" || echo "::warning::MODULES 仍为 y（与 2005 不一致）"
 
       - name: Pack AnyKernel3 zip
         run: |

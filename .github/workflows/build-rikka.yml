@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential flex libelf-dev libssl-dev \
-            libncurses-dev python3 zip device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+            libncurses-dev python3 zip device-tree-compiler gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi qemu-user
       - uses: actions/cache@v4
         id: clang
         with:
@@ -80,7 +80,7 @@ jobs:
           env | grep -E '^(KERNEL_SHA|KSU_SHA|CLANG_SHA|VARIANT|GITHUB_SHA|GITHUB_RUN_ID|GITHUB_RUN_ATTEMPT)=' > evidence/build-identity.txt
           git rev-parse HEAD > evidence/builder-commit.txt
           cp .github/workflows/build-rikka.yml evidence/
-          cp scripts/*rikka* evidence/
+          cp scripts/*rikka* scripts/ksu-preflight.mk scripts/verify-boot.py scripts/fdt.py evidence/
           find evidence -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()

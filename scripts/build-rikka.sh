@@ -35,5 +35,16 @@ grep -qx '# CONFIG_MODULES is not set' out/.config
 grep -qx 'CONFIG_SCHED_CASS=y' out/.config
 grep -qx 'CONFIG_LRU_GEN=y' out/.config
 clang --version > ../evidence/compiler.txt
+if [ "$VARIANT" = next ]; then
+  # Upstream Kbuild edits kernel headers and fs/SELinux source while parsing.
+  # Complete those edits before launching parallel compiler jobs.
+  make -f out/.config -f drivers/staging/kernelsu/kernel/Kbuild \
+    -f ../scripts/ksu-preflight.mk ksu-preflight srctree="$PWD" objtree="$PWD/out" \
+    src=drivers/staging/kernelsu/kernel obj=out/drivers/staging/kernelsu/kernel CC=clang
+fi
 git diff --binary > ../evidence/kernel-prebuild.patch
 make "${ARGS[@]}" -j"$(nproc)" Image.gz-dtb dtbo.img
+git diff --binary > ../evidence/kernel-postbuild.patch
+cmp ../evidence/kernel-prebuild.patch ../evidence/kernel-postbuild.patch || {
+  echo 'Kernel source changed during compilation; refusing a mixed-source artifact'; exit 1;
+}

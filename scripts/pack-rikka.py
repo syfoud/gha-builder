@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import sys
+import subprocess
 import zipfile
 import zlib
 from fdt import parse_dtbs, split_kernel, display
@@ -41,6 +42,8 @@ for path, props in ref.items():
 (ev / '2005-dtb-comparison.json').write_text(json.dumps({'checked': checked, 'differences': differences}, indent=2))
 assert len(checked) >= 30, 'Insufficient tuning coverage'
 assert not differences, f'Native DTB lost original 2005 tuning: {differences}'
+subprocess.run([sys.executable, str(root / 'scripts/verify-boot.py'),
+                str(kernel / 'out/arch/arm64/boot/Image.gz-dtb'), str(ev)], check=True)
 
 config = (kernel / 'out/.config').read_bytes()
 start = image.index(b'IKCFG_ST') + 8

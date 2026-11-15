@@ -34,6 +34,9 @@ cat /proc/cmdline > "$savedir/recovery-cmdline.txt";
 sync;
 ui_print "Boot backup: $savedir/boot-before.img";
 
+# A complete Image.gz-dtb already carries this build's DTB. Do not append
+# a second kernel_dtb extracted from the previous boot image at repack time.
+rm -f "$split_img/kernel_dtb";
 flash_boot;
 dd if="$block" of="$savedir/boot-after.img" bs=1048576 2>/dev/null || abort "Boot readback failed. Restore boot-before.img.";
 newsize=$(wc -c < "$home/boot-new.img");

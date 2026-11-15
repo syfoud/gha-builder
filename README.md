@@ -84,9 +84,20 @@
 
 ## 出包前自动校验（不通过直接失败，不会给你坏包）
 
-- `save_allow_list write version failed`（**旧官方 KernelSU 独有串**）必须 **0** → 保证没有旧 KSU 残留；
-- `ksu_handle_sys_read|hook_manager`（**KernelSU-Next 钩子**）必须 **>0**；
-- 打印 `Linux version`、`CONFIG_KSU=y`、SUSFS 配置状态。
+判定依据修正过（第一次运行就栽在这里）：**Image 是 strip 的、且该树 `CONFIG_KALLSYMS=n`，函数名/符号名不会出现在二进制里**，所以：
+
+- ❌ 不能用 `ksu_handle_*` / `hook_manager` 做判据（实测 6.1 与 2005 内核里都是 0 次）；
+- ❌ `save_allow_list write version failed` 新版 KSU 也有（实测 6.1=1、2005=1），不能当"旧版残留"判据；
+
+现在的校验：
+
+| 检查 | 判据 |
+|---|---|
+| KSU 已开启 | `CONFIG_KSU=y` 必须在 `out/.config` |
+| 是**新版** KSU | Image 里必须出现 `su_compat` / `kernel_umount` / `mnt_ns magic`（旧官方 v0.8 线没有这三个） |
+| 钩子方式 | 打印 `CONFIG_KSU_MANUAL_HOOK=y`（该树无 KPROBES，只能 manual hook） |
+| SUSFS | 打印 `CONFIG_KSU_SUSFS*` 项数 |
+| 交叉验证 | 若 `out/vmlinux` 存在，统计其中 `ksu_*`/`kernelsu_*` 符号数 |
 
 ## 刷入包做了什么（旧 KSU 用户态残留清理写进脚本了）
 

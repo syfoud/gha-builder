@@ -96,18 +96,36 @@ jobs:
         working-directory: kernel
         run: |
           IMG=out/arch/arm64/boot/Image
+          CFG=out/.config
+          echo "=== 产物 ==="
           ls -l "$IMG"
           strings "$IMG" | grep -m1 'Linux version' || true
-          OLD=$(strings "$IMG" | grep -c 'save_allow_list write version failed' || true)
-          NEW=$(strings "$IMG" | grep -cE 'ksu_handle_sys_read|hook_manager' || true)
-          KSU=$(strings "$IMG" | grep -c 'KernelSU' || true)
-          echo "旧版(官方)KernelSU 痕迹: $OLD (必须为 0)"
-          echo "KernelSU-Next 钩子痕迹: $NEW (必须 >0)"
-          echo "KernelSU 字符串总数: $KSU"
-          [ "$OLD" -eq 0 ] || { echo "::error::检测到旧版 KernelSU 残留"; exit 1; }
-          [ "$NEW" -gt 0 ] || { echo "::error::未检测到 KernelSU-Next 集成"; exit 1; }
-          grep -q 'CONFIG_KSU=y' out/.config && echo "CONFIG_KSU=y ✔"
-          grep -q 'CONFIG_KSU_SUSFS' out/.config && echo "SUSFS 配置存在 ✔" || true
+
+          # 判定依据（用 6.1 内核与 2005 内核实测过差异）：
+          #   新版 KSU(KernelSU-Next 系) 带 "su_compat" / "kernel_umount" / "mnt_ns magic" 特征串；
+          #   旧官方 KSU(v0.8 线) 没有这些串。
+          #   注意：函数名(ksu_handle_*/hook_manager)与符号名不会出现在 strip 后的 Image 里
+          #   （该树 CONFIG_KALLSYMS=n），所以不能用函数名做判定；
+          #   "save_allow_list write version failed" 新版也有，不能当旧版判据。
+          NEWMARK=$(strings "$IMG" | grep -cE 'su_compat|kernel_umount|mnt_ns magic' || true)
+          KSUNUM=$(strings "$IMG" | grep -c 'KernelSU' || true)
+          KSUCFG=$(grep -c '^CONFIG_KSU=y' "$CFG" || true)
+          SUSFSCFG=$(grep -c '^CONFIG_KSU_SUSFS' "$CFG" || true)
+          MANUAL=$(grep -c '^CONFIG_KSU_MANUAL_HOOK=y' "$CFG" || true)
+          echo "新版 KSU 特征串(su_compat/kernel_umount/mnt_ns magic): $NEWMARK (必须 >0)"
+          echo "KernelSU 字样总数: $KSUNUM"
+          echo "CONFIG_KSU=y: $KSUCFG (必须 1)"
+          echo "CONFIG_KSU_MANUAL_HOOK=y: $MANUAL"
+          echo "SUSFS 配置项数: $SUSFSCFG"
+
+          [ "$KSUCFG" -ge 1 ] || { echo "::error::CONFIG_KSU 未开启"; exit 1; }
+          [ "$NEWMARK" -ge 1 ] || { echo "::error::镜像里找不到新版 KernelSU 特征串，疑似未集成或仍是旧版"; exit 1; }
+
+          if [ -f out/vmlinux ]; then
+            n=$(strings out/vmlinux | grep -cE '^ksu_|^kernelsu_' || true)
+            echo "vmlinux 里 KSU 相关符号: $n"
+          fi
+          echo "KernelSU 校验通过 ✔"
 
       - name: 2005 对齐状态（编译后实际 config）
         working-directory: kernel

@@ -101,6 +101,24 @@ replace('selinux/selinux.c', 'bool is_zygote(const struct cred *cred)',
 # The release's allowlist checks shell_su_adb_only only for SHELL_UID.
 # Manual sucompat calls that same authorization function; do not add a
 # second unconditional ancestor check that would block non-shell apps.
+# 4.14 releases filters with put_seccomp_filter(), not the newer
+# seccomp_filter_release(). Preserve the release's credential/accounting
+# fixes, replacing only this function with the version-aware legacy helper.
+p = ksu / 'kernel/policy/app_profile.c'
+s = p.read_text(encoding='utf-8')
+compat_profile = (legacy / 'kernel/policy/app_profile.c').read_text(encoding='utf-8')
+start = s.index('static void disable_seccomp(void)')
+end = s.index('int escape_with_root_profile(void)', start)
+compat_start = compat_profile.index('void disable_seccomp(void)')
+compat_end = compat_profile.index('int escape_with_root_profile(void)', compat_start)
+s = s[:start] + compat_profile[compat_start:compat_end] + s[end:]
+p.write_text(s, encoding='utf-8', newline='\n')
+replace('hook/setuid_hook.c', 'extern void disable_seccomp(struct task_struct *tsk);',
+        'extern void disable_seccomp(void);')
+p = ksu / 'kernel/hook/setuid_hook.c'
+s = p.read_text(encoding='utf-8')
+assert s.count('disable_seccomp(current);') == 2
+p.write_text(s.replace('disable_seccomp(current);', 'disable_seccomp();'), encoding='utf-8', newline='\n')
 p = ksu / 'kernel/runtime/ksud_integration.c'
 s = p.read_text(encoding='utf-8')
 s = '#include "policy/feature.h"\n' + s
@@ -163,5 +181,6 @@ evidence.mkdir(exist_ok=True)
     'manual_hook_reference': '8af3d4fec33be32fa5d3f8dae4f380fac45bf2cd',
     'copied_compatibility_files': paths, 'release_uapi_files_unchanged': uapi_after,
     'release_supercall_implementation_retained': True,
+    'compatibility_function_overrides': ['policy/app_profile.c:disable_seccomp'],
     'uapi_version': 5}, indent=2), encoding='utf-8')
 print('Prepared Next v3.4.2 with frozen non-GKI hook port; release UAPI 5 files unchanged')

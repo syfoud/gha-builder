@@ -51,6 +51,18 @@ replace('core/init.c', '#include "hook/syscall_hook.h"',
         '{\n\tksu_handle_execveat_ksud(fd, filename, (struct user_arg_ptr *)argv, (struct user_arg_ptr *)envp, flags);\n'
         '\treturn ksu_handle_execveat_sucompat(fd, filename, argv, envp, flags);\n}')
 replace('core/init.c', '\tksu_syscall_hook_init();', '\t/* Built-in manual VFS hooks: no syscall table patching. */')
+replace('selinux/selinux.h', 'bool is_zygote(const struct cred* cred);',
+        'bool is_zygote(const struct cred* cred);\nbool is_adbd(const struct cred *cred);')
+replace('selinux/selinux.c', 'static u32 cached_init_sid __read_mostly = 0;',
+        'static u32 cached_init_sid __read_mostly = 0;\nstatic u32 cached_adbd_sid __read_mostly;')
+replace('selinux/selinux.c', '    err = security_secctx_to_secid(KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT),',
+        '    err = security_secctx_to_secid("u:r:adbd:s0", strlen("u:r:adbd:s0"), &cached_adbd_sid);\n'
+        '    if (err)\n        cached_adbd_sid = 0;\n\n'
+        '    err = security_secctx_to_secid(KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT),')
+replace('selinux/selinux.c', 'bool is_zygote(const struct cred *cred)',
+        'bool is_adbd(const struct cred *cred)\n{\n'
+        '    return is_sid_match(cred, cached_adbd_sid, "u:r:adbd:s0");\n}\n\n'
+        'bool is_zygote(const struct cred *cred)')
 replace('feature/sucompat.c', '#include "policy/app_profile.h"',
         '#include "policy/app_profile.h"\n#include "feature/shell_su_adb_only.h"')
 replace('feature/sucompat.c', '\tfilename = *filename_ptr;',

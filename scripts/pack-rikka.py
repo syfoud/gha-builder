@@ -116,7 +116,7 @@ with zipfile.ZipFile(out / name, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as 
     for path, data in sorted(files.items()):
         zi = zipfile.ZipInfo(path, (2026, 11, 16, 0, 0, 0))
         zi.create_system = 3
-        executable = path.startswith('tools/') or path.endswith('.sh') or path.endswith('update-binary')
+        executable = path.startswith('tools/') or path.endswith('.sh') or path.endswith('update-binary') or path == 'diagnostics/root-api-probe'
         zi.external_attr = (0o100755 if executable else 0o100644) << 16
         zi.compress_type = zipfile.ZIP_DEFLATED
         z.writestr(zi, data)

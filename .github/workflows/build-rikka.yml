@@ -58,7 +58,12 @@ jobs:
           set -o pipefail
           bash scripts/build-rikka.sh 2>&1 | tee evidence/build.log
       - name: Verify and package
-        run: python3 scripts/pack-rikka.py kernel "$VARIANT"
+        run: |
+          aarch64-linux-gnu-gcc -static -O2 -Wall -Wextra -Werror \
+            -I kernel/drivers/staging/kernelsu diagnostics/root-api-probe.c -o diagnostics/root-api-probe
+          qemu-aarch64 diagnostics/root-api-probe --selftest > evidence/probe-selftest.json
+          aarch64-linux-gnu-readelf -h -l diagnostics/root-api-probe > evidence/probe-elf.txt
+          python3 scripts/pack-rikka.py kernel "$VARIANT"
       - name: Save failure and success evidence
         if: always()
         run: |

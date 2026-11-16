@@ -62,6 +62,11 @@ if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
     src=drivers/staging/kernelsu/kernel obj=out/drivers/staging/kernelsu/kernel CC=clang
 fi
 git diff --binary > ../evidence/kernel-prebuild.patch
+if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
+  # Build the changed components first, keeping all compiler diagnostics.
+  # These objects are reused by the full image build below.
+  make -k "${ARGS[@]}" -j"$(nproc)" drivers/staging/kernelsu/kernel/ fs/
+fi
 make "${ARGS[@]}" -j"$(nproc)" Image.gz-dtb dtbo.img
 git diff --binary > ../evidence/kernel-postbuild.patch
 cmp ../evidence/kernel-prebuild.patch ../evidence/kernel-postbuild.patch || {

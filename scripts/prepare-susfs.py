@@ -19,6 +19,19 @@ def replace(path, old, new, expected=1):
 
 subprocess.run(['git', 'apply', '--check', '--whitespace=nowarn', str(builder / 'patches/rikka-susfs-2.2.0.patch')], cwd=root, check=True)
 subprocess.run(['git', 'apply', '--whitespace=nowarn', str(builder / 'patches/rikka-susfs-2.2.0.patch')], cwd=root, check=True)
+# The reference's first stat hunk also declares ReSukiSU inline hooks.
+# Rikka already has Next manual hooks using a user filename pointer.
+stat_path = root / 'fs/stat.c'
+stat_text = stat_path.read_text(encoding='utf-8')
+foreign_decls = ('#ifdef CONFIG_KSU_SUSFS\n'
+    'extern struct static_key_true ksu_is_init_rc_hook_enabled;\n'
+    'extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);\n'
+    'extern struct static_key_true ksu_su_compat_enabled;\n'
+    'extern bool __ksu_is_allow_uid_for_current(uid_t uid);\n'
+    'extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);\n'
+    '#endif // #ifdef CONFIG_KSU_SUSFS\n')
+assert stat_text.count(foreign_decls) == 1
+stat_path.write_text(stat_text.replace(foreign_decls, ''), encoding='utf-8', newline='\n')
 for source, target in [('susfs-adapter.c', 'compat/susfs.c'), ('susfs-adapter.h', 'compat/susfs.h'),
                        ('susfs.Kconfig', 'compat/susfs.Kconfig')]:
     shutil.copyfile(builder / 'config' / source, ksu / target)

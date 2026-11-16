@@ -13,6 +13,13 @@ cp out/.config ../evidence/base.config
 scripts/config --file out/.config --enable KALLSYMS --enable IKCONFIG --enable IKCONFIG_PROC \
   --enable PRINTK --enable PRINTK_TIME --enable PSTORE --enable PSTORE_CONSOLE \
   --enable PSTORE_PMSG --enable PSTORE_RAM
+# Actual requirements from the connected phone's FCM level 3 matrix.
+# Keep truthful IKCONFIG and satisfy the matrix with compiled functionality.
+scripts/config --file out/.config --enable AUDIT --enable MODULES --enable MODULE_UNLOAD \
+  --enable MODVERSIONS --enable NETFILTER_XT_TARGET_NFLOG --enable NF_CT_NETLINK \
+  --enable PPP --enable PPP_BSDCOMP --enable PPP_DEFLATE --enable PPP_MPPE \
+  --enable PROFILING --enable PERF_EVENTS --enable SECURITY_PERF_EVENTS_RESTRICT \
+  --enable UID_SYS_STATS
 if [ "$VARIANT" = next ]; then
   scripts/config --file out/.config --enable KSU --enable KSU_MANUAL_HOOK \
     --disable KSU_KPROBES_HOOK --disable KSU_SYSCALL_TABLE_HOOK --disable KSU_DEBUG
@@ -25,13 +32,15 @@ scripts/config --file out/.config --set-str LOCALVERSION "-Rikka-2005-$VARIANT"
 make "${ARGS[@]}" olddefconfig
 cp out/.config ../evidence/final.config
 scripts/diffconfig ../evidence/base.config out/.config > ../evidence/config-diff.txt
+python3 ../scripts/check-vintf-config.py out/.config ../config/device-matrix-level3.xml \
+  --report ../evidence/vintf-config-check.json
 if [ "$VARIANT" = next ]; then
   grep -qx 'CONFIG_KSU=y' out/.config
   grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
 else
   grep -qx '# CONFIG_KSU is not set' out/.config
 fi
-grep -qx '# CONFIG_MODULES is not set' out/.config
+grep -qx 'CONFIG_MODULES=y' out/.config
 grep -qx 'CONFIG_SCHED_CASS=y' out/.config
 grep -qx 'CONFIG_LRU_GEN=y' out/.config
 clang --version > ../evidence/compiler.txt

@@ -52,7 +52,8 @@ embedded = dec.decompress(image[start:]) + dec.flush()
 assert dec.eof and dec.unused_data.startswith(b'IKCFG_ED')
 assert embedded == config, 'Embedded config differs from final .config'
 required = [b'CONFIG_SCHED_CASS=y', b'CONFIG_LRU_GEN=y', b'CONFIG_KALLSYMS=y',
-            b'CONFIG_PSTORE_RAM=y', b'CONFIG_IKCONFIG=y']
+            b'CONFIG_PSTORE_RAM=y', b'CONFIG_IKCONFIG=y', b'CONFIG_AUDIT=y',
+            b'CONFIG_MODULES=y', b'CONFIG_MODVERSIONS=y']
 for line in required:
     assert line in config.splitlines(), line
 if variant == 'next':
@@ -67,6 +68,7 @@ else:
     assert b'# CONFIG_KSU is not set' in config.splitlines()
 version = re.search(rb'Linux version [^\0\n]+', image).group().decode()
 manifest = {'variant': variant, 'kernel_version': version,
+            'build_flavor': 'vintf-repair',
             'kernel_sha': '222b8d42dde3f13973357cae50359fa2aca8239d',
             'ksu_sha': 'e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a' if variant == 'next' else None,
             'sha256': {name: hashlib.sha256(data).hexdigest() for name, data in
@@ -77,7 +79,7 @@ manifest = {'variant': variant, 'kernel_version': version,
 (ev / 'manifest.json').write_text(json.dumps(manifest, indent=2))
 
 ak = (root / 'scripts/anykernel-rikka.sh').read_text().replace('@VARIANT@', variant)
-name = f'raphael-rikka-2005-{variant}-{manifest["kernel_sha"][:8]}-{manifest["ksu_sha"][:8] if variant == "next" else "no-root"}.zip'
+name = f'raphael-rikka-2005-{variant}-vintf-{manifest["kernel_sha"][:8]}-{manifest["ksu_sha"][:8] if variant == "next" else "no-root"}.zip'
 out = root / 'dist'
 out.mkdir(exist_ok=True)
 files = {'Image.gz-dtb': payload, 'anykernel.sh': ak.encode(),

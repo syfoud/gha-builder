@@ -1,7 +1,7 @@
-name: Rikka 2005 base with KernelSU Next legacy
+name: Rikka Next VINTF configuration repair
 on:
   push:
-    branches: [rikka-2005-ksunext]
+    branches: [rikka-2005-vintf]
     paths-ignore: ['docs/**', '**.md']
   workflow_dispatch:
 permissions:
@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [next, control]
+        variant: [next]
     env:
       VARIANT: ${{ matrix.variant }}
       KERNEL_SHA: 222b8d42dde3f13973357cae50359fa2aca8239d
@@ -80,19 +80,20 @@ jobs:
           env | grep -E '^(KERNEL_SHA|KSU_SHA|CLANG_SHA|VARIANT|GITHUB_SHA|GITHUB_RUN_ID|GITHUB_RUN_ATTEMPT)=' > evidence/build-identity.txt
           git rev-parse HEAD > evidence/builder-commit.txt
           cp .github/workflows/build-rikka.yml evidence/
-          cp scripts/*rikka* scripts/ksu-preflight.mk scripts/verify-boot.py scripts/fdt.py evidence/
+          cp scripts/*rikka* scripts/ksu-preflight.mk scripts/verify-boot.py scripts/fdt.py scripts/check-vintf-config.py evidence/
+          cp config/device-matrix-level3.xml evidence/
           find evidence -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rikka-2005-${{ matrix.variant }}-evidence
+          name: rikka-vintf-${{ matrix.variant }}-evidence
           path: evidence/
           include-hidden-files: true
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: rikka-2005-${{ matrix.variant }}-flashable
+          name: rikka-vintf-${{ matrix.variant }}-flashable
           path: dist/
           if-no-files-found: error
           retention-days: 30

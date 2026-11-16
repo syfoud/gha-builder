@@ -16,6 +16,33 @@ replace('kernel/Makefile',
         '$(obj)/config_data.gz: arch/arm64/configs/sm8150-perf_defconfig FORCE',
         '$(obj)/config_data.gz: .config FORCE')
 
+# Restore Android's perf_event_paranoid=3 functionality, removed from this
+# source although its defconfig still requests SECURITY_PERF_EVENTS_RESTRICT.
+# Adapted from Google's ANDROID security,perf patch (Iff5bff4fc1042e85866df9faa01bce8d04335ab8).
+replace('security/Kconfig', 'config SECURITY\n',
+        'config SECURITY_PERF_EVENTS_RESTRICT\n'
+        '\tbool "Restrict unprivileged use of performance events"\n'
+        '\tdepends on PERF_EVENTS\n'
+        '\thelp\n'
+        '\t  Set kernel.perf_event_paranoid to 3 by default. No unprivileged\n'
+        '\t  perf_event_open calls are allowed unless this sysctl is lowered.\n\n'
+        'config SECURITY\n')
+replace('kernel/events/core.c',
+        'int sysctl_perf_event_paranoid __read_mostly = 2;',
+        '#ifdef CONFIG_SECURITY_PERF_EVENTS_RESTRICT\n'
+        'int sysctl_perf_event_paranoid __read_mostly = 3;\n'
+        '#else\nint sysctl_perf_event_paranoid __read_mostly = 2;\n#endif')
+replace('include/linux/perf_event.h',
+        'static inline int perf_is_paranoid(void)',
+        'static inline bool perf_paranoid_any(void)\n'
+        '{\n\treturn sysctl_perf_event_paranoid > 2;\n}\n\n'
+        'static inline int perf_is_paranoid(void)')
+replace('kernel/events/core.c',
+        '\t/* Do we allow access to perf_event_open(2) ? */',
+        '\tif (perf_paranoid_any() && !capable(CAP_SYS_ADMIN))\n'
+        '\t\treturn -EACCES;\n\n'
+        '\t/* Do we allow access to perf_event_open(2) ? */')
+
 # Existing Rikka manual hooks cover exec, access, stat, read and input.
 # Do not enter the KSU Kbuild (which performs backports) in the control build.
 replace('drivers/staging/Makefile',

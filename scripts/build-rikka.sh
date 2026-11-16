@@ -20,7 +20,7 @@ scripts/config --file out/.config --enable AUDIT --enable MODULES --enable MODUL
   --enable PPP --enable PPP_BSDCOMP --enable PPP_DEFLATE --enable PPP_MPPE \
   --enable PROFILING --enable PERF_EVENTS --enable SECURITY_PERF_EVENTS_RESTRICT \
   --enable UID_SYS_STATS
-if [ "$VARIANT" = next ]; then
+if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
   scripts/config --file out/.config --enable KSU --enable KSU_MANUAL_HOOK \
     --disable KSU_KPROBES_HOOK --disable KSU_SYSCALL_TABLE_HOOK --disable KSU_DEBUG
 elif [ "$VARIANT" = control ]; then
@@ -28,23 +28,33 @@ elif [ "$VARIANT" = control ]; then
 else
   echo "Unknown variant: $VARIANT"; exit 1
 fi
+if [ "$VARIANT" = next-susfs ]; then
+  scripts/config --file out/.config --enable KSU_SUSFS --enable KSU_SUSFS_SUS_MOUNT \
+    --enable KSU_SUSFS_SUS_KSTAT --enable KSU_SUSFS_SPOOF_UNAME \
+    --enable KSU_SUSFS_ENABLE_LOG --enable KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+    --enable KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG --enable KSU_SUSFS_SUS_MAP \
+    --disable KSU_SUSFS_SUS_PATH --disable KSU_SUSFS_OPEN_REDIRECT
+fi
 scripts/config --file out/.config --set-str LOCALVERSION "-Rikka-2005-$VARIANT"
 make "${ARGS[@]}" olddefconfig
 cp out/.config ../evidence/final.config
 scripts/diffconfig ../evidence/base.config out/.config > ../evidence/config-diff.txt
 python3 ../scripts/check-vintf-config.py out/.config ../config/device-matrix-level3.xml \
   --report ../evidence/vintf-config-check.json
-if [ "$VARIANT" = next ]; then
+if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
   grep -qx 'CONFIG_KSU=y' out/.config
   grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
 else
   grep -qx '# CONFIG_KSU is not set' out/.config
 fi
+if [ "$VARIANT" = next-susfs ]; then
+  grep -qx 'CONFIG_KSU_SUSFS=y' out/.config
+fi
 grep -qx 'CONFIG_MODULES=y' out/.config
 grep -qx 'CONFIG_SCHED_CASS=y' out/.config
 grep -qx 'CONFIG_LRU_GEN=y' out/.config
 clang --version > ../evidence/compiler.txt
-if [ "$VARIANT" = next ]; then
+if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
   # Upstream Kbuild edits kernel headers and fs/SELinux source while parsing.
   # Complete those edits before launching parallel compiler jobs.
   make -f out/.config -f drivers/staging/kernelsu/kernel/Kbuild \

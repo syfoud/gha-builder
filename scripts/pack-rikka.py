@@ -14,7 +14,7 @@ from fdt import parse_dtbs, split_kernel, display
 root = Path(__file__).resolve().parent.parent
 kernel = Path(sys.argv[1]).resolve()
 variant = sys.argv[2]
-assert variant in ('next', 'control')
+assert variant in ('next', 'next-susfs', 'control')
 ev = root / 'evidence'
 ev.mkdir(exist_ok=True)
 payload = (kernel / 'out/arch/arm64/boot/Image.gz-dtb').read_bytes()
@@ -56,7 +56,7 @@ required = [b'CONFIG_SCHED_CASS=y', b'CONFIG_LRU_GEN=y', b'CONFIG_KALLSYMS=y',
             b'CONFIG_MODULES=y', b'CONFIG_MODVERSIONS=y']
 for line in required:
     assert line in config.splitlines(), line
-if variant == 'next':
+if variant in ('next', 'next-susfs'):
     for line in [b'CONFIG_KSU=y', b'CONFIG_KSU_MANUAL_HOOK=y']:
         assert line in config.splitlines()
     syms = (kernel / 'out/System.map').read_text()
@@ -66,11 +66,26 @@ if variant == 'next':
         assert re.search(r'\b' + sym + r'$', syms, re.M), sym
 else:
     assert b'# CONFIG_KSU is not set' in config.splitlines()
+if variant == 'next-susfs':
+    for line in [b'CONFIG_KSU_SUSFS=y', b'CONFIG_KSU_SUSFS_SUS_MOUNT=y',
+                 b'CONFIG_KSU_SUSFS_SUS_KSTAT=y', b'CONFIG_KSU_SUSFS_SUS_MAP=y',
+                 b'# CONFIG_KSU_SUSFS_SUS_PATH is not set',
+                 b'# CONFIG_KSU_SUSFS_OPEN_REDIRECT is not set']:
+        assert line in config.splitlines(), line
+    for sym in ['susfs_init', 'susfs_show_version', 'ksu_susfs_reboot',
+                'ksu_susfs_after_setuid', 'ksu_susfs_policy_loaded',
+                'susfs_add_sus_map', 'susfs_sus_kstat_spoof_generic_fillattr',
+                'susfs_get_non_sus_mnt_id_from_mnt', 'susfs_start_sdcard_monitor_fn']:
+        assert re.search(r'\b' + sym + r'$', syms, re.M), sym
+    assert b'v2.2.0' in image
 version = re.search(rb'Linux version [^\0\n]+', image).group().decode()
 manifest = {'variant': variant, 'kernel_version': version,
             'build_flavor': 'vintf-repair',
+            'susfs_version': 'v2.2.0-NON-GKI' if variant == 'next-susfs' else None,
+            'susfs_port_reference': 'Fansirsqi/raphael-kernel@2a723dc65ed70db121194b4b0da8215b3c5615c6' if variant == 'next-susfs' else None,
+            'susfs_disabled_features': ['SUS_PATH', 'OPEN_REDIRECT'] if variant == 'next-susfs' else [],
             'kernel_sha': '222b8d42dde3f13973357cae50359fa2aca8239d',
-            'ksu_sha': 'e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a' if variant == 'next' else None,
+            'ksu_sha': 'e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a' if variant in ('next', 'next-susfs') else None,
             'sha256': {name: hashlib.sha256(data).hexdigest() for name, data in
                        [('Image', image), ('native.dtb', dt), ('Image.gz-dtb', payload), ('.config', config)]},
             'tuning_properties_verified': len(checked), 'embedded_config_matches': True,
@@ -79,7 +94,7 @@ manifest = {'variant': variant, 'kernel_version': version,
 (ev / 'manifest.json').write_text(json.dumps(manifest, indent=2))
 
 ak = (root / 'scripts/anykernel-rikka.sh').read_text().replace('@VARIANT@', variant)
-name = f'raphael-rikka-2005-{variant}-vintf-{manifest["kernel_sha"][:8]}-{manifest["ksu_sha"][:8] if variant == "next" else "no-root"}.zip'
+name = f'raphael-rikka-2005-{variant}-vintf-{manifest["kernel_sha"][:8]}-{manifest["ksu_sha"][:8] if manifest["ksu_sha"] else "no-root"}.zip'
 out = root / 'dist'
 out.mkdir(exist_ok=True)
 files = {'Image.gz-dtb': payload, 'anykernel.sh': ak.encode(),

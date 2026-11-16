@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "KernelSU Next - SUSFS NON-GKI"
+config KSU_SUSFS
+	bool "SUSFS v2.2 filesystem support"
+	depends on KSU=y && THREAD_INFO_IN_TASK && 64BIT
+	default n
+
+config KSU_SUSFS_SUS_PATH
+	bool "Hide configured suspicious paths"
+	depends on KSU_SUSFS
+	default n
+	help
+	  Upstream marks this feature as not recommended due to lookup overhead
+	  and potential side channels. Enable only after separate device tests.
+
+config KSU_SUSFS_SUS_MOUNT
+	bool "Hide configured suspicious mounts"
+	depends on KSU_SUSFS
+	default y
+
+config KSU_SUSFS_SUS_KSTAT
+	bool "Spoof configured file metadata"
+	depends on KSU_SUSFS
+	default y
+
+config KSU_SUSFS_SPOOF_UNAME
+	bool "Provide configurable uname output"
+	depends on KSU_SUSFS
+	default y
+
+config KSU_SUSFS_ENABLE_LOG
+	bool "Compile SUSFS diagnostic logging"
+	depends on KSU_SUSFS
+	default y
+
+config KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+	bool "Filter KSU and SUSFS names from proc kallsyms"
+	depends on KSU_SUSFS
+	default y
+
+config KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+	bool "Provide configurable proc cmdline output"
+	depends on KSU_SUSFS
+	default y
+
+config KSU_SUSFS_OPEN_REDIRECT
+	bool "Experimental file-open redirection"
+	depends on KSU_SUSFS
+	default n
+
+config KSU_SUSFS_SUS_MAP
+	bool "Filter configured mapped files from proc views"
+	depends on KSU_SUSFS
+	default y
+endmenu

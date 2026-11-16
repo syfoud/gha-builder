@@ -1,7 +1,7 @@
-name: Rikka Next VINTF configuration repair
+name: Rikka Next SUSFS with real VINTF configuration
 on:
   push:
-    branches: [rikka-2005-vintf]
+    branches: [rikka-2005-susfs]
     paths-ignore: ['docs/**', '**.md']
   workflow_dispatch:
 permissions:
@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [next]
+        variant: [next-susfs]
     env:
       VARIANT: ${{ matrix.variant }}
       KERNEL_SHA: 222b8d42dde3f13973357cae50359fa2aca8239d
@@ -48,6 +48,7 @@ jobs:
           git clone --branch legacy https://github.com/KernelSU-Next/KernelSU-Next.git kernel/drivers/staging/kernelsu
           git -C kernel/drivers/staging/kernelsu checkout --detach "$KSU_SHA"
           python3 scripts/prepare-rikka.py kernel
+          python3 scripts/prepare-susfs.py kernel
       - name: Configure and build
         run: |
           set -o pipefail
@@ -82,18 +83,20 @@ jobs:
           cp .github/workflows/build-rikka.yml evidence/
           cp scripts/*rikka* scripts/ksu-preflight.mk scripts/verify-boot.py scripts/fdt.py scripts/check-vintf-config.py evidence/
           cp config/device-matrix-level3.xml evidence/
+          cp scripts/prepare-susfs.py config/susfs* patches/* evidence/
+          cp kernel/fs/susfs.c kernel/include/linux/susfs*.h evidence/ || true
           find evidence -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rikka-vintf-${{ matrix.variant }}-evidence
+          name: rikka-susfs-${{ matrix.variant }}-evidence
           path: evidence/
           include-hidden-files: true
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: rikka-vintf-${{ matrix.variant }}-flashable
+          name: rikka-susfs-${{ matrix.variant }}-flashable
           path: dist/
           if-no-files-found: error
           retention-days: 30

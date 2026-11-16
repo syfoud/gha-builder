@@ -63,6 +63,8 @@ if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
 fi
 git diff --binary > ../evidence/kernel-prebuild.patch
 if [ "$VARIANT" = next ] || [ "$VARIANT" = next-susfs ]; then
+  # The single-directory rule does not traverse SELinux's header generator.
+  make "${ARGS[@]}" -j"$(nproc)" security/selinux/
   # Build the changed components first, keeping all compiler diagnostics.
   # These objects are reused by the full image build below.
   make -k "${ARGS[@]}" -j"$(nproc)" drivers/staging/kernelsu/kernel/ fs/

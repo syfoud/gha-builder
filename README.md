@@ -1,4 +1,12 @@
-# Raphael Kernel Builder — Linux 4.14 with KernelSU-Next
+# Raphael — Rikka 4.14.336 + Next v3.4.2 + SUSFS
+
+当前构建分支：`rikka-2005-release-susfs`。固定 Rikka `222b8d42`、Next 正式版 v3.4.2 `4c706b59`（UAPI 5），移植官方冻结 legacy 参考中的必要 4.14 手动钩子与兼容代码。SUSFS 使用 v2.2.0 NON-GKI 文件系统移植；提供 `next-susfs` 目标包与同基底的 `next` 对照包。此构建包含移植修改，不是官方原样发行镜像。
+
+实际手机日志已证实此前“设备内部出现问题”来自 VINTF 内核配置不匹配；本次编译满足采集矩阵的 193 项要求。关闭 KSU_DEBUG / SUSFS 日志，不在 uname 追加 next/susfs。构建失败也保留日志、配置、源码差异；成功另保留对应 vmlinux、System.map 和 boot 重打包检查。详见 [当前接口与启动问题复盘](docs/20261116-启动提示与管理器接口复盘.md)。
+
+以下内容保留为早期 SOVIET 工作流及上一版 legacy 构建的历史说明；其中版本、推荐 APK、默认配置和交付分支不适用于当前构建。
+
+<details><summary>历史工作流说明（不作为当前刷入指南）</summary>
 
 > **2026-11-16 最终交付分支：`rikka-2005-package`。** 此分支包含最终修正的完整编译、校验和打包脚本。`build-rikka.yml` 使用固定 Rikka 4.14.336 源码和 KernelSU Next legacy 提交，产出 `next` 与关闭 KSU 的 `control` 两个包；`package-rikka.yml` 记录本次复用已编译镜像完成校验打包的过程。下面旧的 SOVIET + 2005-slim 工作流保留作历史记录；本次交付以新工作流为准。验收、boot 备份和失败取证步骤见 [失败复盘与验收](docs/失败复盘与验收.md)。源码基底：[Rikka 固定提交](https://github.com/jianyi520/kernel_xiaomi_raphael-rikka/commit/222b8d42dde3f13973357cae50359fa2aca8239d)；root：[Next legacy 固定提交](https://github.com/KernelSU-Next/KernelSU-Next/commit/e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a)。
 
@@ -294,3 +302,5 @@ Change one dimension per attempt; a booting build narrows the cause to the dimen
 | AOSP clang r547379 (crDroid prebuilt) | build toolchain | GitLab |
 
 Third-party binaries bundled under `ak3/tools/` retain their original licenses. The scripts and workflow in this repository are provided as-is, without warranty; flashing modified boot images can render a device unbootable, so keep a boot backup.
+
+</details>

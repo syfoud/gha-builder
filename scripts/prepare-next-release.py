@@ -98,10 +98,9 @@ replace('selinux/selinux.c', 'bool is_zygote(const struct cred *cred)',
         'bool is_adbd(const struct cred *cred)\n{\n'
         '    return is_sid_match(cred, cached_adbd_sid, "u:r:adbd:s0");\n}\n\n'
         'bool is_zygote(const struct cred *cred)')
-replace('feature/sucompat.c', '#include "policy/app_profile.h"',
-        '#include "policy/app_profile.h"\n#include "feature/shell_su_adb_only.h"')
-replace('feature/sucompat.c', '\tfilename = *filename_ptr;',
-        '\tif (!ksu_shell_su_allowed_for_current())\n\t\treturn 0;\n\n\tfilename = *filename_ptr;')
+# The release's allowlist checks shell_su_adb_only only for SHELL_UID.
+# Manual sucompat calls that same authorization function; do not add a
+# second unconditional ancestor check that would block non-shell apps.
 p = ksu / 'kernel/runtime/ksud_integration.c'
 s = p.read_text(encoding='utf-8')
 s = '#include "policy/feature.h"\n' + s

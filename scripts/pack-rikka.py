@@ -74,6 +74,7 @@ else:
 if variant == 'next-susfs':
     for line in [b'CONFIG_KSU_SUSFS=y', b'CONFIG_KSU_SUSFS_SUS_MOUNT=y',
                  b'CONFIG_KSU_SUSFS_SUS_KSTAT=y', b'CONFIG_KSU_SUSFS_SUS_MAP=y',
+                 b'# CONFIG_KSU_SUSFS_ENABLE_LOG is not set',
                  b'# CONFIG_KSU_SUSFS_SUS_PATH is not set',
                  b'# CONFIG_KSU_SUSFS_OPEN_REDIRECT is not set']:
         assert line in config.splitlines(), line
@@ -88,7 +89,7 @@ manifest = {'variant': variant, 'kernel_version': version,
             'build_flavor': 'vintf-repair',
             'susfs_version': 'v2.2.0-NON-GKI' if variant == 'next-susfs' else None,
             'susfs_port_reference': 'Fansirsqi/raphael-kernel@2a723dc65ed70db121194b4b0da8215b3c5615c6' if variant == 'next-susfs' else None,
-            'susfs_disabled_features': ['SUS_PATH', 'OPEN_REDIRECT'] if variant == 'next-susfs' else [],
+            'susfs_disabled_features': ['ENABLE_LOG', 'SUS_PATH', 'OPEN_REDIRECT'] if variant == 'next-susfs' else [],
             'kernel_sha': '222b8d42dde3f13973357cae50359fa2aca8239d',
             'ksu_sha': '4c706b5938665866ebe16944a481a7b91e3396af' if variant in ('next', 'next-susfs') else None,
             'ksu_release': 'v3.4.2', 'ksu_uapi': 5,

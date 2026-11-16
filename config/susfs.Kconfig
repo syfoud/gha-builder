@@ -31,7 +31,7 @@ config KSU_SUSFS_SPOOF_UNAME
 config KSU_SUSFS_ENABLE_LOG
 	bool "Compile SUSFS diagnostic logging"
 	depends on KSU_SUSFS
-	default y
+	default n
 
 config KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
 	bool "Filter KSU and SUSFS names from proc kallsyms"

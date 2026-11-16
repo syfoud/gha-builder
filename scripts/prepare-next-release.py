@@ -15,6 +15,8 @@ uapi_before = {p.relative_to(ksu).as_posix(): hashlib.sha256(p.read_bytes()).hex
 paths = ['Kbuild', 'Kconfig', 'Makefile', 'compat/kernel_compat.c', 'compat/kernel_compat.h',
          'feature/sucompat.c', 'feature/sucompat.h', 'feature/selinux_hide.c', 'feature/selinux_hide.h',
          'feature/kernel_umount.c', 'infra/file_wrapper.c',
+         'infra/seccomp_cache.c', 'infra/seccomp_cache.h', 'infra/su_mount_ns.c',
+         'manager/pkg_observer.c', 'manager/pkg_observer_defs.h', 'include/util.h',
          'hook/hook_manager.c', 'hook/hook_manager.h',
          'hook/lsm_hooks.c', 'hook/setuid_hook.c', 'hook/setuid_hook.h', 'hook/syscall_table_hook.h',
          'runtime/ksud_integration.c', 'runtime/ksud.h', 'include/arch.h', 'supercall/supercall.c',
@@ -41,6 +43,17 @@ replace('Kbuild', 'kernelsu-objs := core/init.o',
 replace('Kbuild', 'ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include',
         'ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include\n'
         'ccflags-y += -include $(KSU_KERNEL_DIR)/compat/kernel_compat.h')
+replace('compat/kernel_compat.h', '#include <linux/version.h>',
+        '#include <linux/version.h>\n#include <linux/poll.h>\n'
+        '#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0)\n'
+        'typedef unsigned int __poll_t;\n'
+        '#ifndef EPOLLIN\n#define EPOLLIN POLLIN\n#define EPOLLRDNORM POLLRDNORM\n'
+        '#define EPOLLHUP POLLHUP\n#endif\n#endif\n'
+        '#ifndef fallthrough\n#define fallthrough __attribute__((__fallthrough__))\n#endif')
+replace('include/arch.h', '#define PT_REGS_PARM1(x) (__PT_REGS_CAST(x)->__PT_PARM1_REG)',
+        '#define PT_REGS_PARM1(x) (__PT_REGS_CAST(x)->__PT_PARM1_REG)\n'
+        '#define PT_REGS_SYSCALL_PARM1(x) PT_REGS_PARM1(x)')
+replace('sulog/event.c', '#include <linux/minmax.h>', '#include <linux/kernel.h>')
 replace('core/init.c', '#include "hook/syscall_hook_manager.h"', '#include "hook/hook_manager.h"')
 replace('core/init.c', '#include "hook/syscall_hook.h"',
         'extern void ksu_lsm_hook_init(void);\nextern void ksu_lsm_hook_exit(void);\n'
@@ -69,6 +82,7 @@ replace('feature/sucompat.c', '\tfilename = *filename_ptr;',
         '\tif (!ksu_shell_su_allowed_for_current())\n\t\treturn 0;\n\n\tfilename = *filename_ptr;')
 p = ksu / 'kernel/runtime/ksud_integration.c'
 s = p.read_text(encoding='utf-8')
+s = '#include "policy/feature.h"\n' + s
 assert 1 <= s.count('setup_ksu_cred();') <= 4
 s = s.replace('setup_ksu_cred();', 'setup_ksu_cred();\n\t\t\t\tksu_feature_apply_forced();')
 p.write_text(s, encoding='utf-8', newline='\n')

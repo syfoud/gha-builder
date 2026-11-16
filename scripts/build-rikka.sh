@@ -31,11 +31,11 @@ fi
 if [ "$VARIANT" = next-susfs ]; then
   scripts/config --file out/.config --enable KSU_SUSFS --enable KSU_SUSFS_SUS_MOUNT \
     --enable KSU_SUSFS_SUS_KSTAT --enable KSU_SUSFS_SPOOF_UNAME \
-    --enable KSU_SUSFS_ENABLE_LOG --enable KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+    --disable KSU_SUSFS_ENABLE_LOG --enable KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
     --enable KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG --enable KSU_SUSFS_SUS_MAP \
     --disable KSU_SUSFS_SUS_PATH --disable KSU_SUSFS_OPEN_REDIRECT
 fi
-scripts/config --file out/.config --set-str LOCALVERSION "-Rikka-2005-$VARIANT"
+scripts/config --file out/.config --set-str LOCALVERSION "-Rikka-2005"
 make "${ARGS[@]}" olddefconfig
 cp out/.config ../evidence/final.config
 scripts/diffconfig ../evidence/base.config out/.config > ../evidence/config-diff.txt

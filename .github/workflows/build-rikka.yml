@@ -53,16 +53,18 @@ jobs:
           python3 scripts/prepare-next-release.py kernel legacy-compat
           python3 scripts/prepare-rikka.py kernel
           if [ "$VARIANT" = next-susfs ]; then python3 scripts/prepare-susfs.py kernel; fi
+      - name: Build read-only ABI probe
+        run: |
+          aarch64-linux-gnu-gcc -static -O2 -Wall -Wextra -Werror \
+            -I kernel/drivers/staging/kernelsu diagnostics/root-api-probe.c -o diagnostics/root-api-probe
+          qemu-aarch64 diagnostics/root-api-probe --selftest > evidence/probe-selftest.json
+          aarch64-linux-gnu-readelf -h -l diagnostics/root-api-probe > evidence/probe-elf.txt
       - name: Configure and build
         run: |
           set -o pipefail
           bash scripts/build-rikka.sh 2>&1 | tee evidence/build.log
       - name: Verify and package
         run: |
-          aarch64-linux-gnu-gcc -static -O2 -Wall -Wextra -Werror \
-            -I kernel/drivers/staging/kernelsu diagnostics/root-api-probe.c -o diagnostics/root-api-probe
-          qemu-aarch64 diagnostics/root-api-probe --selftest > evidence/probe-selftest.json
-          aarch64-linux-gnu-readelf -h -l diagnostics/root-api-probe > evidence/probe-elf.txt
           python3 scripts/pack-rikka.py kernel "$VARIANT"
       - name: Fetch and verify matching official manager
         if: matrix.variant == 'next'

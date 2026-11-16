@@ -59,10 +59,10 @@ replace('runtime/boot_event.c', 'ksu_selinux_hide_handle_post_fs_data();',
 replace('selinux/rules.c', '\treset_avc_cache();\n#endif\n}',
         '\treset_avc_cache();\n#endif\n#ifdef CONFIG_KSU_SUSFS\n'
         '\tksu_susfs_policy_loaded();\n#endif\n}')
-replace('supercall/supercall.c', '\tif (magic1 != KSU_INSTALL_MAGIC1)',
-        '#ifdef CONFIG_KSU_SUSFS\n\tif (magic2 == SUSFS_MAGIC && current_uid().val == 0) {\n'
+replace('supercall/supercall.c', '    if (magic1 != KSU_INSTALL_MAGIC1)',
+        '#ifdef CONFIG_KSU_SUSFS\n\tif (magic1 == KSU_INSTALL_MAGIC1 && magic2 == SUSFS_MAGIC && current_uid().val == 0) {\n'
         '\t\tksu_susfs_reboot(cmd, arg);\n\t\treturn 0;\n\t}\n#endif\n'
-        '\tif (magic1 != KSU_INSTALL_MAGIC1)')
+        '    if (magic1 != KSU_INSTALL_MAGIC1)')
 replace('policy/app_profile.c', '#include <linux/capability.h>',
         '#include <linux/capability.h>\n#ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif')
 replace('policy/app_profile.c', '    commit_creds(cred);',

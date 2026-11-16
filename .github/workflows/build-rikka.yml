@@ -64,6 +64,21 @@ jobs:
           qemu-aarch64 diagnostics/root-api-probe --selftest > evidence/probe-selftest.json
           aarch64-linux-gnu-readelf -h -l diagnostics/root-api-probe > evidence/probe-elf.txt
           python3 scripts/pack-rikka.py kernel "$VARIANT"
+      - name: Fetch and verify matching official manager
+        if: matrix.variant == 'next'
+        run: |
+          mkdir -p manager
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 \
+            https://github.com/KernelSU-Next/KernelSU-Next/releases/download/v3.4.2/KernelSU_Next_v3.4.2_33355-release.apk \
+            -o manager/KernelSU_Next_v3.4.2_33355-release.apk
+          echo '774a5511f7034a4930e881114e202319cbdc34c5aaaa5c7c6b6d2902364e4c58  manager/KernelSU_Next_v3.4.2_33355-release.apk' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        if: success() && matrix.variant == 'next'
+        with:
+          name: rikka-release-manager-v3.4.2
+          path: manager/
+          if-no-files-found: error
+          retention-days: 30
       - name: Save failure and success evidence
         if: always()
         run: |

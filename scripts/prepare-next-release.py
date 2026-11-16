@@ -19,7 +19,7 @@ paths = ['Kbuild', 'Kconfig', 'Makefile', 'compat/kernel_compat.c', 'compat/kern
          'manager/pkg_observer.c', 'manager/pkg_observer_defs.h', 'include/util.h',
          'hook/hook_manager.c', 'hook/hook_manager.h',
          'hook/lsm_hooks.c', 'hook/setuid_hook.c', 'hook/setuid_hook.h', 'hook/syscall_table_hook.h',
-         'runtime/ksud_integration.c', 'runtime/ksud.h', 'include/arch.h', 'supercall/supercall.c',
+         'runtime/ksud_integration.c', 'runtime/ksud.h', 'include/arch.h',
          'selinux/selinux.c', 'selinux/selinux.h', 'selinux/rules.c',
          'selinux/sepolicy.c', 'selinux/sepolicy.h']
 for name in paths:
@@ -54,6 +54,28 @@ replace('include/arch.h', '#define PT_REGS_PARM1(x) (__PT_REGS_CAST(x)->__PT_PAR
         '#define PT_REGS_PARM1(x) (__PT_REGS_CAST(x)->__PT_PARM1_REG)\n'
         '#define PT_REGS_SYSCALL_PARM1(x) PT_REGS_PARM1(x)')
 replace('sulog/event.c', '#include <linux/minmax.h>', '#include <linux/kernel.h>')
+replace('sulog/event.c', '#include <linux/uaccess.h>',
+        '#include <linux/uaccess.h>\n#include <linux/timekeeping.h>\n'
+        '#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)\n'
+        '#define ktime_get_boottime_ts64 get_monotonic_boottime\n#endif')
+# Keep the release's user-pointer handling and command implementations.
+# Only replace the kprobe entry with the equivalent built-in syscall entry.
+p = ksu / 'kernel/supercall/supercall.c'
+s = p.read_text(encoding='utf-8')
+begin = s.index('static int reboot_handler_pre(')
+commands = s.index('    /* Check if this is a request to install KSU fd */', begin)
+end = s.index('\nstatic struct kprobe reboot_kp', commands)
+s = (s[:begin] +
+     'int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)\n'
+     '{\n    unsigned long arg4 = (unsigned long)*arg;\n'
+     '    unsigned long reply = arg4;\n'
+     '    if (magic1 != KSU_INSTALL_MAGIC1)\n        return 0;\n\n' +
+     s[commands:end] +
+     '\nvoid __init ksu_supercalls_init(void)\n{\n    ksu_supercall_dump_commands();\n}\n'
+     '\nvoid __exit ksu_supercalls_exit(void)\n{\n    ksu_supercall_cleanup_state();\n}\n')
+assert 'void __user **ppptr = (void __user **)arg4;' in s
+assert 'register_kprobe' not in s
+p.write_text(s, encoding='utf-8', newline='\n')
 replace('core/init.c', '#include "hook/syscall_hook_manager.h"', '#include "hook/hook_manager.h"')
 replace('core/init.c', '#include "hook/syscall_hook.h"',
         'extern void ksu_lsm_hook_init(void);\nextern void ksu_lsm_hook_exit(void);\n'
@@ -141,5 +163,6 @@ evidence.mkdir(exist_ok=True)
     'release_commit': '4c706b5938665866ebe16944a481a7b91e3396af',
     'manual_hook_reference': '8af3d4fec33be32fa5d3f8dae4f380fac45bf2cd',
     'copied_compatibility_files': paths, 'release_uapi_files_unchanged': uapi_after,
+    'release_supercall_implementation_retained': True,
     'uapi_version': 5}, indent=2), encoding='utf-8')
 print('Prepared Next v3.4.2 with frozen non-GKI hook port; release UAPI 5 files unchanged')

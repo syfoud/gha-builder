@@ -57,6 +57,11 @@ required = [b'CONFIG_SCHED_CASS=y', b'CONFIG_LRU_GEN=y', b'CONFIG_KALLSYMS=y',
 for line in required:
     assert line in config.splitlines(), line
 if variant in ('next', 'next-susfs'):
+    release_port = json.loads((ev / 'release-port.json').read_text())
+    assert release_port['release_commit'] == '4c706b5938665866ebe16944a481a7b91e3396af'
+    assert release_port['uapi_version'] == 5
+    for name, expected in release_port['release_uapi_files_unchanged'].items():
+        assert hashlib.sha256((kernel / 'drivers/staging/kernelsu' / name).read_bytes()).hexdigest() == expected
     for line in [b'CONFIG_KSU=y', b'CONFIG_KSU_MANUAL_HOOK=y']:
         assert line in config.splitlines()
     syms = (kernel / 'out/System.map').read_text()
@@ -85,7 +90,9 @@ manifest = {'variant': variant, 'kernel_version': version,
             'susfs_port_reference': 'Fansirsqi/raphael-kernel@2a723dc65ed70db121194b4b0da8215b3c5615c6' if variant == 'next-susfs' else None,
             'susfs_disabled_features': ['SUS_PATH', 'OPEN_REDIRECT'] if variant == 'next-susfs' else [],
             'kernel_sha': '222b8d42dde3f13973357cae50359fa2aca8239d',
-            'ksu_sha': 'e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a' if variant in ('next', 'next-susfs') else None,
+            'ksu_sha': '4c706b5938665866ebe16944a481a7b91e3396af' if variant in ('next', 'next-susfs') else None,
+            'ksu_release': 'v3.4.2', 'ksu_uapi': 5,
+            'ksu_manual_hook_reference': '8af3d4fec33be32fa5d3f8dae4f380fac45bf2cd',
             'sha256': {name: hashlib.sha256(data).hexdigest() for name, data in
                        [('Image', image), ('native.dtb', dt), ('Image.gz-dtb', payload), ('.config', config)]},
             'tuning_properties_verified': len(checked), 'embedded_config_matches': True,

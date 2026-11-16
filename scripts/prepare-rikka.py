@@ -79,7 +79,12 @@ for name, fdtype, stattype, copyfn, handler in [
 
 # The manual exec call passes a struct user_arg_ptr, not a kernel argv array.
 # Avoid interpreting user pointers as kernel strings in the optional su log.
-replace('drivers/staging/kernelsu/kernel/feature/sucompat.c',
-        'const char *const *sucompat_argv = (const char *const *)__never_use_argv;',
-        'const char *const *sucompat_argv = NULL; /* manual hook: user_arg_ptr is not kernel argv */')
+sucompat_path = 'drivers/staging/kernelsu/kernel/feature/sucompat.c'
+sucompat_text = (root / sucompat_path).read_text()
+if 'sucompat_argv' in sucompat_text:
+    replace(sucompat_path,
+            'const char *const *sucompat_argv = (const char *const *)__never_use_argv;',
+            'const char *const *sucompat_argv = NULL; /* manual hook: user_arg_ptr is not kernel argv */')
+else:
+    assert 'void *__never_use_argv' in sucompat_text
 print('Applied checked Rikka manual-hook integration and truthful IKCONFIG fix')

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* SUSFS v2.2 NON-GKI adapter for pinned KernelSU Next e5f5ec99.
+/* SUSFS v2.2 NON-GKI adapter for Next v3.4.2 with manual VFS hooks.
  * Keep Next's LSM setuid hook, credential handling, and unmount implementation.
  * Filesystem port: simonpunk SUSFS, via Fansirsqi/raphael-kernel 2a723dc6.
  */

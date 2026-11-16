@@ -1,6 +1,7 @@
 # 保证脚本在任意平台检出后仍是 LF（安卓 recovery 的 sh 不能吃 CRLF）
 * text=auto eol=lf
 *.sh   text eol=lf
+*.patch whitespace=-blank-at-eol,-space-before-tab
 *.yml  text eol=lf
 *.md   text eol=lf
 *.config text eol=lf

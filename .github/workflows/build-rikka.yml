@@ -1,7 +1,7 @@
-name: Rikka Next SUSFS with real VINTF configuration
+name: Rikka Next v3.4.2 release with VINTF repair and SUSFS
 on:
   push:
-    branches: [rikka-2005-susfs]
+    branches: [rikka-2005-release-susfs]
     paths-ignore: ['docs/**', '**.md']
   workflow_dispatch:
 permissions:
@@ -13,11 +13,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [next-susfs]
+        variant: [next, next-susfs]
     env:
       VARIANT: ${{ matrix.variant }}
       KERNEL_SHA: 222b8d42dde3f13973357cae50359fa2aca8239d
-      KSU_SHA: e5f5ec998de88b9fc43c62cff8f7ae12d3f4800a
+      KSU_SHA: 4c706b5938665866ebe16944a481a7b91e3396af
+      KSU_COMPAT_SHA: 8af3d4fec33be32fa5d3f8dae4f380fac45bf2cd
       CLANG_SHA: 384088e3bbf8cae957785c17ada7e87932cf62f2
     steps:
       - uses: actions/checkout@v4
@@ -45,10 +46,13 @@ jobs:
           git -C kernel remote add origin https://github.com/jianyi520/kernel_xiaomi_raphael-rikka.git
           git -C kernel fetch --depth=1 origin "$KERNEL_SHA"
           git -C kernel checkout --detach FETCH_HEAD
-          git clone --branch legacy https://github.com/KernelSU-Next/KernelSU-Next.git kernel/drivers/staging/kernelsu
+          git clone --branch v3.4.2 https://github.com/KernelSU-Next/KernelSU-Next.git kernel/drivers/staging/kernelsu
           git -C kernel/drivers/staging/kernelsu checkout --detach "$KSU_SHA"
+          git clone --depth=1 --branch v3.4.0-legacy https://github.com/KernelSU-Next/KernelSU-Next.git legacy-compat
+          test "$(git -C legacy-compat rev-parse HEAD)" = "$KSU_COMPAT_SHA"
+          python3 scripts/prepare-next-release.py kernel legacy-compat
           python3 scripts/prepare-rikka.py kernel
-          python3 scripts/prepare-susfs.py kernel
+          if [ "$VARIANT" = next-susfs ]; then python3 scripts/prepare-susfs.py kernel; fi
       - name: Configure and build
         run: |
           set -o pipefail
@@ -78,25 +82,26 @@ jobs:
               fi
             done
           fi
-          env | grep -E '^(KERNEL_SHA|KSU_SHA|CLANG_SHA|VARIANT|GITHUB_SHA|GITHUB_RUN_ID|GITHUB_RUN_ATTEMPT)=' > evidence/build-identity.txt
+          env | grep -E '^(KERNEL_SHA|KSU_SHA|KSU_COMPAT_SHA|CLANG_SHA|VARIANT|GITHUB_SHA|GITHUB_RUN_ID|GITHUB_RUN_ATTEMPT)=' > evidence/build-identity.txt
           git rev-parse HEAD > evidence/builder-commit.txt
           cp .github/workflows/build-rikka.yml evidence/
           cp scripts/*rikka* scripts/ksu-preflight.mk scripts/verify-boot.py scripts/fdt.py scripts/check-vintf-config.py evidence/
           cp config/device-matrix-level3.xml evidence/
           cp scripts/prepare-susfs.py config/susfs* patches/* evidence/
+          cp scripts/prepare-next-release.py evidence/
           cp kernel/fs/susfs.c kernel/include/linux/susfs*.h evidence/ || true
           find evidence -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rikka-susfs-${{ matrix.variant }}-evidence
+          name: rikka-release-${{ matrix.variant }}-evidence
           path: evidence/
           include-hidden-files: true
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: rikka-susfs-${{ matrix.variant }}-flashable
+          name: rikka-release-${{ matrix.variant }}-flashable
           path: dist/
           if-no-files-found: error
           retention-days: 30

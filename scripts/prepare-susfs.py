@@ -40,8 +40,8 @@ replace('feature/kernel_umount.c', 'static bool ksu_kernel_umount_enabled = true
 replace('hook/setuid_hook.c', '    ksu_handle_umount(old_uid, new_uid);',
         '    ksu_handle_umount(old_uid, new_uid);\n#ifdef CONFIG_KSU_SUSFS\n'
         '\tksu_susfs_after_setuid(new_uid);\n#endif')
-replace('runtime/boot_event.c', '\tksu_selinux_hide_handle_post_fs_data();',
-        '\tksu_selinux_hide_handle_post_fs_data();\n#ifdef CONFIG_KSU_SUSFS\n'
+replace('runtime/boot_event.c', 'ksu_selinux_hide_handle_post_fs_data();',
+        'ksu_selinux_hide_handle_post_fs_data();\n#ifdef CONFIG_KSU_SUSFS\n'
         '\tksu_susfs_post_fs_data();\n#endif')
 replace('selinux/rules.c', '\treset_avc_cache();\n#endif\n}',
         '\treset_avc_cache();\n#endif\n#ifdef CONFIG_KSU_SUSFS\n'

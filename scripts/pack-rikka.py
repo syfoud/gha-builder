@@ -75,21 +75,24 @@ if variant == 'next-susfs':
     for line in [b'CONFIG_KSU_SUSFS=y', b'CONFIG_KSU_SUSFS_SUS_MOUNT=y',
                  b'CONFIG_KSU_SUSFS_SUS_KSTAT=y', b'CONFIG_KSU_SUSFS_SUS_MAP=y',
                  b'# CONFIG_KSU_SUSFS_ENABLE_LOG is not set',
-                 b'# CONFIG_KSU_SUSFS_SUS_PATH is not set',
+                 b'CONFIG_KSU_SUSFS_SUS_PATH=y',
                  b'# CONFIG_KSU_SUSFS_OPEN_REDIRECT is not set']:
         assert line in config.splitlines(), line
     for sym in ['susfs_init', 'susfs_show_version', 'ksu_susfs_reboot',
                 'ksu_susfs_after_setuid', 'ksu_susfs_policy_loaded',
                 'susfs_add_sus_map', 'susfs_sus_kstat_spoof_generic_fillattr',
-                'susfs_get_non_sus_mnt_id_from_mnt', 'susfs_start_sdcard_monitor_fn']:
+                'susfs_get_non_sus_mnt_id_from_mnt', 'susfs_start_sdcard_monitor_fn',
+                'susfs_add_sus_path', 'susfs_add_sus_path_loop',
+                'susfs_is_inode_sus_path', 'susfs_get_data_path']:
         assert re.search(r'\b' + sym + r'$', syms, re.M), sym
     assert b'v2.2.0' in image
 version = re.search(rb'Linux version [^\0\n]+', image).group().decode()
 manifest = {'variant': variant, 'kernel_version': version,
-            'build_flavor': 'vintf-repair',
+            'build_flavor': 'vintf-suspath',
+            'sus_path_enabled': variant == 'next-susfs',
             'susfs_version': 'v2.2.0-NON-GKI' if variant == 'next-susfs' else None,
             'susfs_port_reference': 'Fansirsqi/raphael-kernel@2a723dc65ed70db121194b4b0da8215b3c5615c6' if variant == 'next-susfs' else None,
-            'susfs_disabled_features': ['ENABLE_LOG', 'SUS_PATH', 'OPEN_REDIRECT'] if variant == 'next-susfs' else [],
+            'susfs_disabled_features': ['ENABLE_LOG', 'OPEN_REDIRECT'] if variant == 'next-susfs' else [],
             'kernel_sha': '222b8d42dde3f13973357cae50359fa2aca8239d',
             'ksu_sha': '4c706b5938665866ebe16944a481a7b91e3396af' if variant in ('next', 'next-susfs') else None,
             'ksu_release': 'v3.4.2', 'ksu_uapi': 5,
@@ -102,7 +105,7 @@ manifest = {'variant': variant, 'kernel_version': version,
 (ev / 'manifest.json').write_text(json.dumps(manifest, indent=2))
 
 ak = (root / 'scripts/anykernel-rikka.sh').read_text().replace('@VARIANT@', variant)
-name = f'raphael-rikka-2005-{variant}-vintf-{manifest["kernel_sha"][:8]}-{manifest["ksu_sha"][:8] if manifest["ksu_sha"] else "no-root"}.zip'
+name = f'raphael-rikka-2005-{variant}-suspath-vintf-{manifest["kernel_sha"][:8]}-{manifest["ksu_sha"][:8] if manifest["ksu_sha"] else "no-root"}.zip'
 out = root / 'dist'
 out.mkdir(exist_ok=True)
 files = {'Image.gz-dtb': payload, 'anykernel.sh': ak.encode(),

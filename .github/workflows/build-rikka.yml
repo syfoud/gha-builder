@@ -1,7 +1,7 @@
-name: Rikka Next v3.4.2 release with VINTF repair and SUSFS
+name: Rikka Next v3.4.2 SUS_PATH rebuild
 on:
   push:
-    branches: [rikka-2005-release-susfs]
+    branches: [rikka-2005-suspath-20261117]
     paths-ignore: ['docs/**', '**.md']
   workflow_dispatch:
 permissions:
@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [next, next-susfs]
+        variant: [next-susfs]
     env:
       VARIANT: ${{ matrix.variant }}
       KERNEL_SHA: 222b8d42dde3f13973357cae50359fa2aca8239d

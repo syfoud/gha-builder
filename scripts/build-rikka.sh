@@ -2,8 +2,8 @@
 set -euo pipefail
 export PATH="$HOME/clang-r510928/bin:$PATH"
 export KBUILD_BUILD_USER=rikka-rebuild KBUILD_BUILD_HOST=github-actions
-export KBUILD_BUILD_TIMESTAMP='Mon Nov 16 00:00:00 UTC 2026'
-export KBUILD_BUILD_VERSION=1
+export KBUILD_BUILD_TIMESTAMP='Tue Nov 17 00:00:00 UTC 2026'
+export KBUILD_BUILD_VERSION=2
 cd kernel
 ARGS=(O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang
   CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-
@@ -33,7 +33,7 @@ if [ "$VARIANT" = next-susfs ]; then
     --enable KSU_SUSFS_SUS_KSTAT --enable KSU_SUSFS_SPOOF_UNAME \
     --disable KSU_SUSFS_ENABLE_LOG --enable KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
     --enable KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG --enable KSU_SUSFS_SUS_MAP \
-    --disable KSU_SUSFS_SUS_PATH --disable KSU_SUSFS_OPEN_REDIRECT
+    --enable KSU_SUSFS_SUS_PATH --disable KSU_SUSFS_OPEN_REDIRECT
 fi
 scripts/config --file out/.config --set-str LOCALVERSION "-Rikka-2005"
 make "${ARGS[@]}" olddefconfig
@@ -49,6 +49,7 @@ else
 fi
 if [ "$VARIANT" = next-susfs ]; then
   grep -qx 'CONFIG_KSU_SUSFS=y' out/.config
+  grep -qx 'CONFIG_KSU_SUSFS_SUS_PATH=y' out/.config
 fi
 grep -qx 'CONFIG_MODULES=y' out/.config
 grep -qx 'CONFIG_SCHED_CASS=y' out/.config
